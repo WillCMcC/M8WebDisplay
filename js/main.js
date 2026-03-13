@@ -172,6 +172,115 @@ let peakRms = 0;
 let bgInvert = false;
 const analyserData = new Uint8Array(2048);
 
+// --- Reactivity FX Config ---
+
+const fxSliders = [
+    { key: 'fxShake',       label: 'SHAKE',        default: 50, group: 'canvas' },
+    { key: 'fxSkew',        label: 'SKEW',         default: 50, group: 'canvas' },
+    { key: 'fxZoom',        label: 'ZOOM PULSE',   default: 0,  group: 'canvas' },
+    { key: 'fxHueShift',    label: 'HUE SHIFT',    default: 0,  group: 'canvas' },
+    { key: 'fxInvert',      label: 'INVERT FLASH', default: 0,  group: 'canvas' },
+    { key: 'fxScanlines',   label: 'SCANLINES',    default: 0,  group: 'canvas' },
+    { key: 'fxBgBright',    label: 'BG PULSE',     default: 0,  group: 'video' },
+    { key: 'fxBgBlur',      label: 'BG BLUR',      default: 0,  group: 'video' },
+    { key: 'fxBgZoom',      label: 'BG ZOOM',      default: 0,  group: 'video' },
+    { key: 'fxBgSaturate',  label: 'BG SATURATE',  default: 0,  group: 'video' },
+];
+
+const fx = {};
+fxSliders.forEach(s => { fx[s.key] = Settings.load('fx_' + s.key, s.default); });
+
+// --- Reactivity Panel ---
+
+function buildReactivityPanel() {
+    const panel = document.createElement('div');
+    panel.id = 'reactivity';
+    panel.classList.add('hidden');
+
+    const header = document.createElement('div');
+    header.className = 'fx-header';
+    header.textContent = 'REACTIVITY';
+    panel.append(header);
+
+    let lastGroup = '';
+    for (const s of fxSliders) {
+        if (s.group !== lastGroup) {
+            const groupLabel = document.createElement('div');
+            groupLabel.className = 'fx-group';
+            groupLabel.textContent = s.group === 'canvas' ? 'DISPLAY' : 'BACKGROUND';
+            panel.append(groupLabel);
+            lastGroup = s.group;
+        }
+
+        const row = document.createElement('div');
+        row.className = 'fx-row';
+
+        const label = document.createElement('span');
+        label.className = 'fx-label';
+        label.textContent = s.label;
+
+        const input = document.createElement('input');
+        input.type = 'range';
+        input.min = '0';
+        input.max = '100';
+        input.value = fx[s.key];
+
+        const val = document.createElement('span');
+        val.className = 'fx-val';
+        val.textContent = fx[s.key];
+
+        on(input, 'input', () => {
+            const v = parseInt(input.value);
+            fx[s.key] = v;
+            val.textContent = v;
+            Settings.save('fx_' + s.key, v);
+        });
+
+        row.append(label, input, val);
+        panel.append(row);
+    }
+
+    const btnRow = document.createElement('div');
+    btnRow.className = 'fx-buttons';
+
+    const resetBtn = document.createElement('button');
+    resetBtn.textContent = 'RESET';
+    on(resetBtn, 'click', () => {
+        fxSliders.forEach(s => {
+            fx[s.key] = s.default;
+            Settings.save('fx_' + s.key, s.default);
+        });
+        panel.querySelectorAll('.fx-row').forEach((row, i) => {
+            row.querySelector('input').value = fxSliders[i].default;
+            row.querySelector('.fx-val').textContent = fxSliders[i].default;
+        });
+    });
+
+    const closeBtn = document.createElement('button');
+    closeBtn.textContent = 'CLOSE';
+    on(closeBtn, 'click', () => panel.classList.add('hidden'));
+
+    btnRow.append(resetBtn, closeBtn);
+    panel.append(btnRow);
+
+    document.body.append(panel);
+    return panel;
+}
+
+const reactivityPanel = buildReactivityPanel();
+
+Settings.onChange('reactivity', () => {
+    reactivityPanel.classList.toggle('hidden');
+});
+
+// --- Scanline Overlay ---
+
+const scanlineOverlay = document.createElement('div');
+scanlineOverlay.id = 'scanlines';
+document.getElementById('display').append(scanlineOverlay);
+
+// --- Background Video ---
+
 function ensureBgVideo() {
     if (bgVideo) return bgVideo;
     bgVideo = document.createElement('video');
@@ -231,8 +340,11 @@ function clearBackground() {
     if (ytFrame) ytFrame.remove();
     if (bgElement) {
         bgElement.style.filter = '';
+        bgElement.style.transform = '';
     }
     canvasEl.style.transform = '';
+    canvasEl.style.filter = '';
+    scanlineOverlay.style.opacity = '0';
     renderer.setBgTransparent(false);
     bgElement = null;
     bgAnimating = false;
@@ -247,6 +359,8 @@ function startBgLoop() {
     bgAnimating = true;
     requestAnimationFrame(updateBgReactive);
 }
+
+let lastPeakHit = 0;
 
 function updateBgReactive() {
     if (!bgAnimating || !bgElement) return;
@@ -267,22 +381,95 @@ function updateBgReactive() {
     smoothedRms = smoothedRms * 0.7 + rms * 0.3;
     peakRms = rms > peakRms ? rms * 0.6 + peakRms * 0.4 : peakRms * 0.92;
 
-    // --- Canvas glitch (tiny shear/shake on loud peaks) ---
     const glitchRaw = Math.min(peakRms * 2.5, 1);
     const glitchLevel = Math.max(0, (glitchRaw - 0.4) / 0.6);
+    const now = performance.now();
 
-    if (glitchLevel > 0 && Math.random() < glitchLevel * 0.6) {
-        const shakeX = (Math.random() - 0.5) * glitchLevel * 3;
-        const shakeY = (Math.random() - 0.5) * glitchLevel * 1.5;
-        const skewX = (Math.random() - 0.5) * glitchLevel * 1.5;
-        canvasEl.style.transform = `translate(${shakeX}px, ${shakeY}px) skewX(${skewX}deg)`;
-    } else {
-        canvasEl.style.transform = '';
+    // --- Canvas transform: shake + skew + zoom ---
+    const transforms = [];
+    const shakeAmt = fx.fxShake / 100;
+    const skewAmt = fx.fxSkew / 100;
+    const zoomAmt = fx.fxZoom / 100;
+
+    if (shakeAmt > 0 && glitchLevel > 0 && Math.random() < glitchLevel * 0.6) {
+        const shakeX = (Math.random() - 0.5) * glitchLevel * shakeAmt * 6;
+        const shakeY = (Math.random() - 0.5) * glitchLevel * shakeAmt * 3;
+        transforms.push(`translate(${shakeX}px, ${shakeY}px)`);
     }
 
-    // --- Video invert filter (toggle with 'i') ---
+    if (skewAmt > 0 && glitchLevel > 0 && Math.random() < glitchLevel * 0.5) {
+        const skewX = (Math.random() - 0.5) * glitchLevel * skewAmt * 4;
+        transforms.push(`skewX(${skewX}deg)`);
+    }
+
+    if (zoomAmt > 0) {
+        const scale = 1 + smoothedRms * zoomAmt * 0.3;
+        transforms.push(`scale(${scale})`);
+    }
+
+    canvasEl.style.transform = transforms.length ? transforms.join(' ') : '';
+
+    // --- Canvas filter: hue-shift + invert flash ---
+    const filters = [];
+    const hueAmt = fx.fxHueShift / 100;
+    const invertAmt = fx.fxInvert / 100;
+
+    if (hueAmt > 0) {
+        const hue = smoothedRms * hueAmt * 360;
+        filters.push(`hue-rotate(${hue}deg)`);
+    }
+
+    if (invertAmt > 0 && glitchLevel > 0.3) {
+        if (rms > peakRms * 0.8 && now - lastPeakHit > 100) {
+            lastPeakHit = now;
+        }
+        if (now - lastPeakHit < 60 * invertAmt) {
+            filters.push('invert(1)');
+        }
+    }
+
+    canvasEl.style.filter = filters.length ? filters.join(' ') : '';
+
+    // --- Scanlines ---
+    const scanAmt = fx.fxScanlines / 100;
+    scanlineOverlay.style.opacity = scanAmt > 0 ? scanAmt * 0.5 : '0';
+
+    // --- Video filters: brightness, blur, saturate ---
     if (bgElement.tagName !== 'IFRAME') {
-        bgElement.style.filter = bgInvert ? 'invert(1)' : '';
+        const bgFilters = [];
+        const brightAmt = fx.fxBgBright / 100;
+        const blurAmt = fx.fxBgBlur / 100;
+        const satAmt = fx.fxBgSaturate / 100;
+
+        if (brightAmt > 0) {
+            const brightness = 0.6 + smoothedRms * brightAmt * 2.0;
+            bgFilters.push(`brightness(${brightness})`);
+        }
+
+        if (blurAmt > 0) {
+            const blur = (1 - Math.min(smoothedRms * 4, 1)) * blurAmt * 8;
+            bgFilters.push(`blur(${blur}px)`);
+        }
+
+        if (satAmt > 0) {
+            const saturate = 0.5 + smoothedRms * satAmt * 4;
+            bgFilters.push(`saturate(${saturate})`);
+        }
+
+        if (bgInvert) bgFilters.push('invert(1)');
+
+        bgElement.style.filter = bgFilters.length ? bgFilters.join(' ') : '';
+    }
+
+    // --- Video transform: zoom ---
+    if (bgElement.tagName !== 'IFRAME') {
+        const bgZoomAmt = fx.fxBgZoom / 100;
+        if (bgZoomAmt > 0) {
+            const bgScale = 1 + smoothedRms * bgZoomAmt * 0.4;
+            bgElement.style.transform = `scale(${bgScale})`;
+        } else {
+            bgElement.style.transform = '';
+        }
     }
 
     requestAnimationFrame(updateBgReactive);

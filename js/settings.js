@@ -31,6 +31,7 @@ setupButton('bgYoutube', 'BG: YouTube');
 setupButton('bgVideoFile', 'BG: Video File');
 setupButton('bgCamera', 'BG: Camera');
 setupButton('bgRemove', 'BG: Remove');
+setupButton('reactivity', 'Reactivity');
 setupButton('controlMapping', 'Control Mapping');
 setupButton('firmware', 'Load Firmware');
 setupButton('fullscreen', 'Fullscreen');

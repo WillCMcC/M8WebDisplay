@@ -12,6 +12,7 @@
     background-color: rgba(0, 0, 0, 0.5);
     transition: background-color $menu-time linear 0s;
     user-select: none;
+    z-index: 1100;
 
     &.hidden {
         display: block;
