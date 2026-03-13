@@ -10,10 +10,6 @@
     max-width: calc(100vh * 4 / 3);
     max-height: 100vh;
     margin: 0 auto;
-    top: 0;
-    bottom: 0;
-    left: 0;
-    right: 0;
     user-select: none;
     overflow: hidden;
 
@@ -24,22 +20,6 @@
         height: 100%;
     }
 
-    #bg-video, .bg-youtube {
-        position: absolute;
-        width: 100%;
-        height: 100%;
-        object-fit: cover;
-        border: 0;
-        pointer-events: none;
-        display: none;
-    }
-
-    .bg-youtube {
-        width: 110%;
-        height: 110%;
-        left: -5%;
-        top: -5%;
-    }
 
     svg text {
         font-family: $m8-font;
@@ -82,7 +62,7 @@
         height: calc(100vw * 6 / 4);
         max-width: calc(100vh * 4 / 6);
 
-        canvas, svg, #bg-video, .bg-youtube {
+        canvas, svg {
             height: 50%;
         }
 
@@ -175,6 +155,25 @@
             }
         }
     }
+}
+
+#bg-video, .bg-youtube {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    object-fit: cover;
+    border: 0;
+    pointer-events: none;
+    display: none;
+}
+
+.bg-youtube {
+    width: 110vw;
+    height: 110vh;
+    left: -5vw;
+    top: -5vh;
 }
 
 #capture-shield {

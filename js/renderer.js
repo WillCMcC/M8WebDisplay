@@ -37,6 +37,10 @@ export class Renderer {
         // Non-GL renderer doesn't support MK2 yet
     }
 
+    setBgTransparent(transparent) {
+        // Non-GL renderer doesn't support transparent background
+    }
+
     setFont(f) {
         if(this._fontId == f) return;
         this._fontId = f;

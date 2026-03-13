@@ -44,7 +44,6 @@ let resizeCanvas = (function() {
         const ratio = devicePixelRatio;
         const dW = display.clientWidth * ratio;
         const svg = document.getElementById('screen');
-        const bgEls = display.querySelectorAll('#bg-video, .bg-youtube');
 
         if (Settings.get('snapPixels') && dW <= 1600) {
             let dH = display.clientHeight * ratio;
@@ -60,11 +59,9 @@ let resizeCanvas = (function() {
             const w = `${width}px`, h = `${height}px`, l = `${left}px`, t = `${top}px`;
             applySize(canvas, w, h, l, t);
             if (svg) applySize(svg, w, h, l, t);
-            bgEls.forEach(el => applySize(el, w, h, l, t));
         } else {
             applySize(canvas, null, null, null, null);
             if (svg) applySize(svg, null, null, null, null);
-            bgEls.forEach(el => applySize(el, null, null, null, null));
         }
     }
 
@@ -184,7 +181,7 @@ function ensureBgVideo() {
     bgVideo.playsInline = true;
     bgVideo.style.display = 'none';
     const display = document.getElementById('display');
-    display.insertBefore(bgVideo, canvasEl);
+    document.body.insertBefore(bgVideo, display);
     return bgVideo;
 }
 
@@ -212,7 +209,7 @@ function ensureVideoInput() {
 }
 
 function activateBackground() {
-    canvasEl.style.mixBlendMode = 'screen';
+    renderer.setBgTransparent(true);
     Audio.enableAnalyser();
     startBgLoop();
 }
@@ -236,7 +233,7 @@ function clearBackground() {
         bgElement.style.filter = '';
     }
     canvasEl.style.transform = '';
-    canvasEl.style.mixBlendMode = '';
+    renderer.setBgTransparent(false);
     bgElement = null;
     bgAnimating = false;
     bgInvert = false;
@@ -318,11 +315,9 @@ Settings.onChange('bgYoutube', () => {
     iframe.allow = 'autoplay; encrypted-media';
     iframe.setAttribute('frameborder', '0');
     iframe.style.display = 'block';
-    const display = document.getElementById('display');
-    display.insertBefore(iframe, document.getElementById('canvas'));
+    document.body.insertBefore(iframe, document.getElementById('display'));
     bgElement = iframe;
     activateBackground();
-    resizeCanvas();
 });
 
 Settings.onChange('bgVideoFile', () => {

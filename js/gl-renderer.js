@@ -83,6 +83,7 @@ export class Renderer {
     _modelConfig;
     _fontId = 0;
     _shaderSources;
+    _bgTransparent = false;
 
     constructor(bg, onBackgroundChanged) {
         this._bg = [bg[0] / 255, bg[1] / 255, bg[2] / 255];
@@ -90,7 +91,8 @@ export class Renderer {
 
         this._canvas = document.getElementById('canvas');
         this._gl = this._canvas.getContext('webgl2', {
-            alpha: false,
+            alpha: true,
+            premultipliedAlpha: false,
             antialias: false
         });
 
@@ -144,6 +146,12 @@ export class Renderer {
         this._setupText(gl);
     }
 
+    setBgTransparent(transparent) {
+        this._bgTransparent = transparent;
+        this._rectsClear = true;
+        this._queueFrame();
+    }
+
     _rectShader;
     _rectVao;
     _rectShapes = new Uint16Array(MAX_RECTS * 6);
@@ -195,7 +203,8 @@ export class Renderer {
         if (this._rectsClear) {
             gl.bindFramebuffer(gl.FRAMEBUFFER, this._rectsFramebuffer);
 
-            gl.clearColor(this._bg[0], this._bg[1], this._bg[2], 1);
+            const bgAlpha = this._bgTransparent ? 0 : 1;
+            gl.clearColor(this._bg[0], this._bg[1], this._bg[2], bgAlpha);
             gl.clear(gl.COLOR_BUFFER_BIT);
             this._rectsClear = false;
         }
@@ -215,8 +224,10 @@ export class Renderer {
         }
 
         gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+        gl.disable(gl.BLEND);
         gl.useProgram(this._blitShader);
         gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+        gl.enable(gl.BLEND);
     }
 
     drawRect(x, y, w, h, r, g, b) {
