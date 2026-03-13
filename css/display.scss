@@ -15,12 +15,30 @@
     left: 0;
     right: 0;
     user-select: none;
+    overflow: hidden;
 
     canvas, svg {
         position: absolute;
         image-rendering: pixelated;
         width: 100%;
         height: 100%;
+    }
+
+    #bg-video, .bg-youtube {
+        position: absolute;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        border: 0;
+        pointer-events: none;
+        display: none;
+    }
+
+    .bg-youtube {
+        width: 110%;
+        height: 110%;
+        left: -5%;
+        top: -5%;
     }
 
     svg text {
@@ -64,7 +82,7 @@
         height: calc(100vw * 6 / 4);
         max-width: calc(100vh * 4 / 6);
 
-        canvas, svg {
+        canvas, svg, #bg-video, .bg-youtube {
             height: 50%;
         }
 

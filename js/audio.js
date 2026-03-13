@@ -4,7 +4,49 @@
 import { wait, on, off } from './util.js';
 
 let ctx;
+let source;
+let analyser;
 let enabled = true;
+let selectedDeviceId = null;
+
+export function getAnalyser() {
+    return analyser;
+}
+
+export function enableAnalyser() {
+    if (!ctx || !source || analyser) return;
+    analyser = ctx.createAnalyser();
+    analyser.fftSize = 2048;
+    analyser.smoothingTimeConstant = 0.3;
+    source.connect(analyser);
+}
+
+export function disableAnalyser() {
+    if (!analyser) return;
+    analyser.disconnect();
+    analyser = null;
+}
+
+export async function listAudioInputs() {
+    try {
+        await navigator.mediaDevices.getUserMedia({ audio: true });
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        return devices.filter(d =>
+            d.kind === 'audioinput' &&
+            d.deviceId !== 'default' &&
+            d.deviceId !== 'communications');
+    } catch {
+        return [];
+    }
+}
+
+export async function selectDevice(deviceId) {
+    selectedDeviceId = deviceId;
+    if (ctx) {
+        await stop();
+        await start();
+    }
+}
 
 export async function start(attempts = 1) {
     if (ctx || !enabled)
@@ -15,15 +57,20 @@ export async function start(attempts = 1) {
 
         await navigator.mediaDevices.getUserMedia({ audio: true });
         let deviceId;
-        while (true) {
-            deviceId = await findDeviceId();
-            if (deviceId)
-                break;
 
-            if (--attempts > 0) {
-                await wait(300);
-            } else {
-                break;
+        if (selectedDeviceId) {
+            deviceId = selectedDeviceId;
+        } else {
+            while (true) {
+                deviceId = await findDeviceId();
+                if (deviceId)
+                    break;
+
+                if (--attempts > 0) {
+                    await wait(300);
+                } else {
+                    break;
+                }
             }
         }
 
@@ -38,7 +85,7 @@ export async function start(attempts = 1) {
                 noiseSuppression: false
             } })
 
-        const source = ctx.createMediaStreamSource(stream);
+        source = ctx.createMediaStreamSource(stream);
         source.connect(ctx.destination);
 
         if (ctx.state !== 'running') {
@@ -69,6 +116,8 @@ async function findDeviceId() {
 export async function stop() {
     ctx && await ctx.close().catch(() => {});
     ctx = null;
+    source = null;
+    analyser = null;
 }
 
 function waitForUserGesture() {

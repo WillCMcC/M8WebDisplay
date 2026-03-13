@@ -4,8 +4,74 @@
 import * as Shaders from '../build/shaders.js';
 import { font1 } from '../build/font1.js';
 import { font2 } from '../build/font2.js';
+import { font3 } from '../build/font3.js';
+import { font4 } from '../build/font4.js';
+import { font5 } from '../build/font5.js';
 
 const MAX_RECTS = 1024;
+
+// Model configs: [screenW, screenH, fonts]
+// Each font: [cellW, cellH, glyphW, glyphH, voffset, cols, rows, fontImage, fontTexW, fontTexH]
+const MODEL_CONFIGS = {
+    0: { // MK1 (320x240)
+        screenW: 320, screenH: 240,
+        fonts: [
+            { cellW: 8, cellH: 10, glyphW: 5, glyphH: 7, voffset: 0, textOffsetY: 3, cols: 40, rows: 24, src: font1, texW: 470, texH: 7 },
+            { cellW: 10, cellH: 12, glyphW: 8, glyphH: 9, voffset: -40, textOffsetY: 0, cols: 40, rows: 24, src: font2, texW: 752, texH: 9, headerRows: 3, headerOffsetY: 5 },
+        ]
+    },
+    1: { // MK2 (480x320)
+        screenW: 480, screenH: 320,
+        fonts: [
+            { cellW: 12, cellH: 14, glyphW: 9, glyphH: 9, voffset: -2, textOffsetY: 3, cols: 40, rows: 23, src: font3, texW: 846, texH: 9 },
+            { cellW: 14, cellH: 16, glyphW: 10, glyphH: 10, voffset: -2, textOffsetY: 4, cols: 34, rows: 20, src: font4, texW: 940, texH: 10, headerRows: 3, headerOffsetY: 5 },
+            { cellW: 16, cellH: 18, glyphW: 12, glyphH: 12, voffset: -54, textOffsetY: 4, cols: 30, rows: 18, src: font5, texW: 1128, texH: 12, headerRows: 4, headerOffsetY: 5 },
+        ]
+    }
+};
+
+function generateShaders(screenW, screenH, fontCfg) {
+    const sw = screenW.toFixed(1);
+    const sh = screenH.toFixed(1);
+    const hw = (screenW / 2).toFixed(1);
+    const hh = (screenH / 2).toFixed(1);
+
+    const blit_vert = `#version 300 es
+out vec2 srcCoord;const vec2 corners[]=vec2[](vec2(0,0),vec2(0,1),vec2(1,0),vec2(1,1));void main(){vec2 pos=corners[gl_VertexID]*vec2(2.0,2.0)+vec2(-1.0,-1.0);gl_Position=vec4(pos,0.0,1.0);srcCoord=corners[gl_VertexID]*vec2(${sw},${sh});}`;
+
+    const rect_vert = `#version 300 es
+layout(location=0)in vec4 shape;layout(location=1)in vec3 colour;out vec3 colourV;const vec2 corners[]=vec2[](vec2(0,0),vec2(0,1),vec2(1,0),vec2(1,1));const vec2 camScale=vec2(2.0/${sw},-2.0/${sh});const vec2 camOffset=vec2(-${hw},-${hh});void main(){vec2 pos=shape.xy;vec2 size=shape.zw;pos=((corners[gl_VertexID]*size+pos)+camOffset)*camScale;gl_Position=vec4(pos,0.0,1.0);colourV=colour;}`;
+
+    const wave_vert = `#version 300 es
+layout(location=0)in uint value;const vec2 camScale=vec2(2.0/${sw},-2.0/${sh});const vec2 camOffset=vec2(-${hw},-${hh});void main(){vec2 pos=vec2(float(gl_VertexID),float(value));pos=(pos+vec2(0.5)+camOffset)*camScale;gl_PointSize=1.0;gl_Position=vec4(pos,0.0,1.0);}`;
+
+    // Generate text vertex shaders for each font config
+    const textShaders = {};
+    fontCfg.forEach((f, idx) => {
+        const gw = f.glyphW.toFixed(1);
+        const gh = f.glyphH.toFixed(1);
+        const cw = f.cellW.toFixed(1);
+        const ch = f.cellH.toFixed(1);
+        const cols = f.cols.toFixed(1);
+        const offy = f.textOffsetY.toFixed(1);
+        const headerRows = f.headerRows || 0;
+        const headerOffsetY = (f.headerOffsetY || 0).toFixed(1);
+
+        let shaderBody;
+        if (headerRows > 0) {
+            // Large font with header row adjustment (like text2)
+            shaderBody = `#version 300 es
+layout(location=0)in vec3 colour;layout(location=1)in float char;out vec3 colourV;out vec2 fontCoord;const vec2 corners[]=vec2[](vec2(0,0),vec2(0,1),vec2(1,0),vec2(1,1));const vec2 camScale=vec2(2.0/${sw},-2.0/${sh});const vec2 camOffset=vec2(-${hw},-${hh});const vec2 size=vec2(${gw},${gh});void main(){float row;float col=modf(float(gl_InstanceID)/${cols},row)*${cols};row=row-${headerRows.toFixed(1)};vec2 pos=vec2(col,row)*vec2(${cw},${ch})+vec2(0.0,${offy});if(row==0.0){pos=pos+vec2(0.0,${headerOffsetY});}pos=((corners[gl_VertexID]*size+pos)+camOffset)*camScale;gl_Position=vec4(char==0.0?vec2(2.0):pos,0.0,1.0);colourV=colour;fontCoord=(vec2(char-1.0,0.0)+corners[gl_VertexID])*size;}`;
+        } else {
+            // Small font (like text1)
+            shaderBody = `#version 300 es
+layout(location=0)in vec3 colour;layout(location=1)in float char;out vec3 colourV;out vec2 fontCoord;const vec2 corners[]=vec2[](vec2(0,0),vec2(0,1),vec2(1,0),vec2(1,1));const vec2 camScale=vec2(2.0/${sw},-2.0/${sh});const vec2 camOffset=vec2(-${hw},-${hh});const vec2 size=vec2(${gw},${gh});void main(){float row;float col=modf(float(gl_InstanceID)/${cols},row)*${cols};vec2 pos=vec2(col,row)*vec2(${cw},${ch})+vec2(0.0,${offy});pos=((corners[gl_VertexID]*size+pos)+camOffset)*camScale;gl_Position=vec4(char==0.0?vec2(2.0):pos,0.0,1.0);colourV=colour;fontCoord=(vec2(char-1.0,0.0)+corners[gl_VertexID])*size;}`;
+        }
+        textShaders[`text${idx}_vert`] = shaderBody;
+    });
+
+    return { blit_vert, rect_vert, wave_vert, ...textShaders };
+}
 
 export class Renderer {
     _canvas;
@@ -13,39 +79,66 @@ export class Renderer {
     _bg = [0, 0, 0];
     _frameQueued = false;
     _onBackgroundChanged;
-
-    _fontConfig = [
-        //glyph x, y, hoffset, voffset
-        [8,10,0,0],
-        [10,12,0,-40]
-    ];
+    _model = 0;
+    _modelConfig;
     _fontId = 0;
+    _shaderSources;
 
     constructor(bg, onBackgroundChanged) {
         this._bg = [bg[0] / 255, bg[1] / 255, bg[2] / 255];
         this._onBackgroundChanged = onBackgroundChanged;
 
-        this._canvas = document.getElementById('canvas')
+        this._canvas = document.getElementById('canvas');
         this._gl = this._canvas.getContext('webgl2', {
             alpha: false,
             antialias: false
         });
 
-        const gl = this._gl;
+        this._modelConfig = MODEL_CONFIGS[0];
+        this._shaderSources = null; // use built-in Shaders for MK1
 
+        const gl = this._gl;
         this._setupRects(gl);
         this._setupText(gl);
         this._setupWave(gl);
 
         gl.enable(gl.BLEND);
         gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
-        gl.viewport(0,0, 320, 240);
+        gl.viewport(0, 0, this._modelConfig.screenW, this._modelConfig.screenH);
 
         this._queueFrame();
     }
 
+    setModel(model) {
+        if (this._model === model) return;
+        const config = MODEL_CONFIGS[model];
+        if (!config) return;
+
+        this._model = model;
+        this._modelConfig = config;
+        this._fontId = 0;
+
+        // Resize canvas
+        this._canvas.width = config.screenW;
+        this._canvas.height = config.screenH;
+
+        // Generate model-specific shaders
+        this._shaderSources = generateShaders(config.screenW, config.screenH, config.fonts);
+
+        const gl = this._gl;
+        gl.viewport(0, 0, config.screenW, config.screenH);
+
+        // Rebuild GL pipeline
+        this._setupRects(gl);
+        this._setupText(gl);
+        this._setupWave(gl);
+
+        this.clear();
+    }
+
     setFont(f) {
-        if(this._fontId == f) return;
+        if (f >= this._modelConfig.fonts.length) f = 0;
+        if (this._fontId === f) return;
         this._fontId = f;
         const gl = this._gl;
         this._setupText(gl);
@@ -62,7 +155,7 @@ export class Renderer {
     _blitShader;
 
     _setupRects(gl) {
-        this._rectShader = buildProgram(gl, 'rect');
+        this._rectShader = this._buildProgram(gl, 'rect');
 
         this._rectVao = gl.createVertexArray();
         gl.bindVertexArray(this._rectVao);
@@ -77,10 +170,13 @@ export class Renderer {
         gl.vertexAttribPointer(1, 3, gl.UNSIGNED_BYTE, true, 12, 8);
         gl.vertexAttribDivisor(1, 1);
 
+        const sw = this._modelConfig.screenW;
+        const sh = this._modelConfig.screenH;
+
         this._rectsTex = gl.createTexture();
         gl.activeTexture(gl.TEXTURE0);
         gl.bindTexture(gl.TEXTURE_2D, this._rectsTex);
-        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 320, 240, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, sw, sh, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
@@ -90,7 +186,7 @@ export class Renderer {
         gl.bindFramebuffer(gl.FRAMEBUFFER, this._rectsFramebuffer);
         gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this._rectsTex, 0);
 
-        this._blitShader = buildProgram(gl, 'blit');
+        this._blitShader = this._buildProgram(gl, 'blit');
         gl.useProgram(this._blitShader);
         gl.uniform1i(gl.getUniformLocation(this._blitShader, 'src'), 0);
     }
@@ -124,7 +220,12 @@ export class Renderer {
     }
 
     drawRect(x, y, w, h, r, g, b) {
-        if (x === 0 && y === 0 && w >= 320 && h >= 240) {
+        const sw = this._modelConfig.screenW;
+        const sh = this._modelConfig.screenH;
+        const fontCfg = this._modelConfig.fonts[this._fontId];
+        const voffset = fontCfg ? fontCfg.voffset : 0;
+
+        if (x === 0 && y === 0 && w >= sw && h >= sh) {
             this._onBackgroundChanged(r, g, b);
 
             this._bg = [r / 255, g / 255, b / 255];
@@ -134,7 +235,7 @@ export class Renderer {
         } else if (this._rectCount < MAX_RECTS) {
             const i = this._rectCount;
             this._rectShapes[i * 6 + 0] = x;
-            this._rectShapes[i * 6 + 1] = y ? y+this._fontConfig[this._fontId][3] : y;
+            this._rectShapes[i * 6 + 1] = y ? y + voffset : y;
             this._rectShapes[i * 6 + 2] = w;
             this._rectShapes[i * 6 + 3] = h;
             this._rectColours[i * 12 + 0] = r;
@@ -153,16 +254,38 @@ export class Renderer {
     _textShader;
     _textVao;
     _textTex;
-    _textColours = new Uint8Array(40 * 24 * 3);
-    _textChars = new Uint8Array(40 * 24);
+    _textColours;
+    _textChars;
+    _textGridSize = 0;
 
     _setupText(gl) {
-        
-        if(this._fontId == 0) {
-            this._textShader = buildProgram(gl, 'text1');
-        } else {
-            this._textShader = buildProgram(gl, 'text2');
+        const fontCfg = this._modelConfig.fonts[this._fontId];
+        if (!fontCfg) return;
+
+        const gridSize = fontCfg.cols * fontCfg.rows;
+
+        // Rebuild text arrays if grid size changed
+        if (gridSize !== this._textGridSize) {
+            this._textColours = new Uint8Array(gridSize * 3);
+            this._textChars = new Uint8Array(gridSize);
+            this._textGridSize = gridSize;
         }
+
+        // Build text shader for this font
+        if (this._shaderSources) {
+            // MK2: use generated shaders
+            this._textShader = this._buildProgramFromSource(gl, `text${this._fontId}`,
+                this._shaderSources[`text${this._fontId}_vert`],
+                Shaders.text1_frag); // All text frags are the same
+        } else {
+            // MK1: use pre-built shaders
+            if (this._fontId === 0) {
+                this._textShader = this._buildProgram(gl, 'text1');
+            } else {
+                this._textShader = this._buildProgram(gl, 'text2');
+            }
+        }
+
         gl.useProgram(this._textShader);
         gl.uniform1i(gl.getUniformLocation(this._textShader, 'font'), 1);
 
@@ -192,31 +315,19 @@ export class Renderer {
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
 
-        if(this._fontId == 0) {
-            gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 470, 7, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
-            const fontImage1 = new Image();
-            fontImage1.onload = () => {
-                gl.activeTexture(gl.TEXTURE1);
-                gl.bindTexture(gl.TEXTURE_2D, this._textTex);
-                gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 470, 7, 0, gl.RGBA, gl.UNSIGNED_BYTE, fontImage1);
-                this._queueFrame();
-            }
-            fontImage1.src = font1;
-        } else {
-            gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 752, 9, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
-            const fontImage2 = new Image();
-            fontImage2.onload = () => {
-                gl.activeTexture(gl.TEXTURE1);
-                gl.bindTexture(gl.TEXTURE_2D, this._textTex);
-                gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 752, 9, 0, gl.RGBA, gl.UNSIGNED_BYTE, fontImage2);
-                this._queueFrame();
-            }
-            fontImage2.src = font2;
-        }
-        
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, fontCfg.texW, fontCfg.texH, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+        const fontImage = new Image();
+        fontImage.onload = () => {
+            gl.activeTexture(gl.TEXTURE1);
+            gl.bindTexture(gl.TEXTURE_2D, this._textTex);
+            gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, fontImage);
+            this._queueFrame();
+        };
+        fontImage.src = fontCfg.src;
     }
 
     _renderText(gl) {
+        if (!this._textChars) return;
         gl.useProgram(this._textShader);
         gl.bindVertexArray(this._textVao);
 
@@ -232,12 +343,16 @@ export class Renderer {
             this._textChars.updated = false;
         }
 
-        gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, 40 * 24);
+        gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, this._textGridSize);
     }
 
     drawText(c, x, y, r, g, b) {
-        const i = Math.floor(y / this._fontConfig[this._fontId][1]) * 40 + Math.floor(x / this._fontConfig[this._fontId][0]);
-        if(i >= 960) return;
+        const fontCfg = this._modelConfig.fonts[this._fontId];
+        if (!fontCfg) return;
+
+        const cols = fontCfg.cols;
+        const i = Math.floor(y / fontCfg.cellH) * cols + Math.floor(x / fontCfg.cellW);
+        if (i >= this._textGridSize || i < 0) return;
         this._textChars[i] = c - 32;
         this._textChars.updated = true;
         this._textColours[i * 3 + 0] = r;
@@ -247,13 +362,16 @@ export class Renderer {
 
         this._queueFrame();
     }
-    
-    _waveData = new Uint8Array(320);
+
+    _waveData;
     _waveColour = new Float32Array([0.5, 1, 1]);
     _waveOn = false;
 
     _setupWave(gl) {
-        this._waveShader = buildProgram(gl, 'wave');
+        const sw = this._modelConfig.screenW;
+        this._waveData = new Uint8Array(sw);
+
+        this._waveShader = this._buildProgram(gl, 'wave');
         this._waveShader.colourUniform = gl.getUniformLocation(this._waveShader, 'colour');
         this._waveVao = gl.createVertexArray();
         gl.bindVertexArray(this._waveVao);
@@ -277,18 +395,22 @@ export class Renderer {
                 this._waveData.updated = false;
             }
 
-            gl.drawArrays(gl.POINTS, 0, 320);
+            gl.drawArrays(gl.POINTS, 0, this._modelConfig.screenW);
         }
     }
 
     drawWave(r, g, b, data) {
+        const sw = this._modelConfig.screenW;
         this._waveColour[0] = r / 255;
         this._waveColour[1] = g / 255;
         this._waveColour[2] = b / 255;
-        
+
         if (data.length != 0) {
+            if (data.length > sw) {
+                data = data.subarray(data.length - sw);
+            }
             this._waveData.fill(-1);
-            this._waveData.set(data, 320-data.length);
+            this._waveData.set(data, sw - data.length);
             this._waveData.updated = true;
             this._waveOn = true;
             this._queueFrame();
@@ -319,42 +441,46 @@ export class Renderer {
     clear() {
         this._rectsClear = true;
         this._rectCount = 0;
-        this._textChars.fill(0);
-        this._textChars.updated = true;
+        if (this._textChars) {
+            this._textChars.fill(0);
+            this._textChars.updated = true;
+        }
         this._waveOn = false;
 
         this._queueFrame();
     }
-}
 
-function compileShader(gl, name, type) {
-    const shader = gl.createShader(type);
-    gl.shaderSource(shader, Shaders[name]);
-    gl.compileShader(shader);
+    // Shader building helpers
+    _compileShaderSource(gl, name, type, source) {
+        const shader = gl.createShader(type);
+        gl.shaderSource(shader, source);
+        gl.compileShader(shader);
+        if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS))
+            throw new Error(`Failed to compile shader (${name}): ${gl.getShaderInfoLog(shader)}`);
+        return shader;
+    }
 
-    if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS))
-        throw new Error(`Failed to compile shader (${name}): ${gl.getShaderInfoLog(shader)}`);
+    _buildProgram(gl, name) {
+        const vertSrc = (this._shaderSources && this._shaderSources[`${name}_vert`]) || Shaders[`${name}_vert`];
+        const fragSrc = (this._shaderSources && this._shaderSources[`${name}_frag`]) || Shaders[`${name}_frag`];
+        return this._linkProgram(gl, name,
+            this._compileShaderSource(gl, `${name}_vert`, gl.VERTEX_SHADER, vertSrc),
+            this._compileShaderSource(gl, `${name}_frag`, gl.FRAGMENT_SHADER, fragSrc));
+    }
 
-    return shader;
-}
+    _buildProgramFromSource(gl, name, vertSrc, fragSrc) {
+        return this._linkProgram(gl, name,
+            this._compileShaderSource(gl, `${name}_vert`, gl.VERTEX_SHADER, vertSrc),
+            this._compileShaderSource(gl, `${name}_frag`, gl.FRAGMENT_SHADER, fragSrc));
+    }
 
-function linkProgram(gl, name, vertexShader, fragmentShader) {
-    const program = gl.createProgram();
-
-    gl.attachShader(program, vertexShader);
-    gl.attachShader(program, fragmentShader);
-    gl.linkProgram(program);
-
-    if (!gl.getProgramParameter(program, gl.LINK_STATUS))
-        throw new Error(`Failed to link program (${name}): ${gl.getProgramInfoLog(program)}`);
-
-    return program;
-}
-
-function buildProgram(gl, name) {
-    return linkProgram(
-        gl,
-        name,
-        compileShader(gl, `${name}_vert`, gl.VERTEX_SHADER),
-        compileShader(gl, `${name}_frag`, gl.FRAGMENT_SHADER));
+    _linkProgram(gl, name, vertexShader, fragmentShader) {
+        const program = gl.createProgram();
+        gl.attachShader(program, vertexShader);
+        gl.attachShader(program, fragmentShader);
+        gl.linkProgram(program);
+        if (!gl.getProgramParameter(program, gl.LINK_STATUS))
+            throw new Error(`Failed to link program (${name}): ${gl.getProgramInfoLog(program)}`);
+        return program;
+    }
 }

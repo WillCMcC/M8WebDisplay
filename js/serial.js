@@ -120,7 +120,7 @@ export class SerialConnection {
                 dataBits: 8,
                 stopBits: 1,
                 parity: 'none',
-                bufferSize: 4096
+                bufferSize: 262144
             });
 
             this._port.reader = await this._port.readable.getReader();

@@ -33,9 +33,13 @@ export class Renderer {
         this._buildText();
     }
 
+    setModel(model) {
+        // Non-GL renderer doesn't support MK2 yet
+    }
+
     setFont(f) {
         if(this._fontId == f) return;
-        this._fontId = f;   
+        this._fontId = f;
         this._buildText();
         this.clear();
     }
@@ -177,6 +181,9 @@ export class Renderer {
         this._waveColour = `rgb(${r}, ${g}, ${b})`
 
         if (data.length != 0) {
+            if (data.length > 320) {
+                data = data.subarray(data.length - 320);
+            }
             this._waveData.fill(-1);
             this._waveData.set(data, 320-data.length);
             this._waveOn = true;
