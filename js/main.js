@@ -89,16 +89,6 @@ Settings.onChange('enableAudio', value => {
 
 Settings.onChange('snapPixels', () => resizeCanvas());
 
-Settings.onChange('controlMapping', () => {
-    hide('#info');
-    Input.startMapping().then(resizeCanvas);
-    resizeCanvas();
-});
-
-Settings.onChange('firmware', () => {
-    hide('#info');
-    Firmware.open();
-});
 
 function toggleFullscreen() {
     if (document.fullscreenElement) {
@@ -112,7 +102,6 @@ Settings.onChange('fullscreen', toggleFullscreen);
 
 on('#display', 'dblclick', toggleFullscreen);
 
-Settings.onChange('about', () => show('#info'));
 
 function connectionChanged(isConnected) {
     if (isConnected) {
@@ -163,6 +152,7 @@ on('#info button', 'click', () => hide('#info'));
 // --- Background Video ---
 
 const canvasEl = document.getElementById('canvas');
+const displayEl = document.getElementById('display');
 let bgVideo = null;
 let videoInput = null;
 let bgElement = null;
@@ -342,7 +332,7 @@ function clearBackground() {
         bgElement.style.filter = '';
         bgElement.style.transform = '';
     }
-    canvasEl.style.transform = '';
+    displayEl.style.transform = '';
     canvasEl.style.filter = '';
     scanlineOverlay.style.opacity = '0';
     renderer.setBgTransparent(false);
@@ -407,7 +397,7 @@ function updateBgReactive() {
         transforms.push(`scale(${scale})`);
     }
 
-    canvasEl.style.transform = transforms.length ? transforms.join(' ') : '';
+    displayEl.style.transform = transforms.length ? transforms.join(' ') : '';
 
     // --- Canvas filter: hue-shift + invert flash ---
     const filters = [];
@@ -435,50 +425,48 @@ function updateBgReactive() {
     scanlineOverlay.style.opacity = scanAmt > 0 ? scanAmt * 0.5 : '0';
 
     // --- Video filters: brightness, blur, saturate ---
-    if (bgElement.tagName !== 'IFRAME') {
-        const bgFilters = [];
-        const brightAmt = fx.fxBgBright / 100;
-        const blurAmt = fx.fxBgBlur / 100;
-        const satAmt = fx.fxBgSaturate / 100;
+    const bgFilters = [];
+    const brightAmt = fx.fxBgBright / 100;
+    const blurAmt = fx.fxBgBlur / 100;
+    const satAmt = fx.fxBgSaturate / 100;
 
-        if (brightAmt > 0) {
-            const brightness = 0.6 + smoothedRms * brightAmt * 2.0;
-            bgFilters.push(`brightness(${brightness})`);
-        }
-
-        if (blurAmt > 0) {
-            const blur = (1 - Math.min(smoothedRms * 4, 1)) * blurAmt * 8;
-            bgFilters.push(`blur(${blur}px)`);
-        }
-
-        if (satAmt > 0) {
-            const saturate = 0.5 + smoothedRms * satAmt * 4;
-            bgFilters.push(`saturate(${saturate})`);
-        }
-
-        if (bgInvert) bgFilters.push('invert(1)');
-
-        bgElement.style.filter = bgFilters.length ? bgFilters.join(' ') : '';
+    if (brightAmt > 0) {
+        const brightness = 0.6 + smoothedRms * brightAmt * 2.0;
+        bgFilters.push(`brightness(${brightness})`);
     }
 
+    if (blurAmt > 0) {
+        const blur = (1 - Math.min(smoothedRms * 4, 1)) * blurAmt * 8;
+        bgFilters.push(`blur(${blur}px)`);
+    }
+
+    if (satAmt > 0) {
+        const saturate = 0.5 + smoothedRms * satAmt * 4;
+        bgFilters.push(`saturate(${saturate})`);
+    }
+
+    if (bgInvert) bgFilters.push('invert(1)');
+
+    bgElement.style.filter = bgFilters.length ? bgFilters.join(' ') : '';
+
     // --- Video transform: zoom ---
-    if (bgElement.tagName !== 'IFRAME') {
-        const bgZoomAmt = fx.fxBgZoom / 100;
-        if (bgZoomAmt > 0) {
-            const bgScale = 1 + smoothedRms * bgZoomAmt * 0.4;
-            bgElement.style.transform = `scale(${bgScale})`;
-        } else {
-            bgElement.style.transform = '';
-        }
+    const bgZoomAmt = fx.fxBgZoom / 100;
+    if (bgZoomAmt > 0) {
+        const bgScale = 1 + smoothedRms * bgZoomAmt * 0.4;
+        bgElement.style.transform = `scale(${bgScale})`;
+    } else {
+        bgElement.style.transform = '';
     }
 
     requestAnimationFrame(updateBgReactive);
 }
 
-// Toggle invert with 'i' key
 on(document, 'keydown', e => {
     if (e.key === 'i' && bgElement && !e.repeat) {
         bgInvert = !bgInvert;
+    }
+    if (e.key === 'Escape') {
+        closeYtModal();
     }
 });
 
@@ -487,24 +475,223 @@ function getYouTubeId(url) {
     return m ? m[1] : null;
 }
 
-Settings.onChange('bgYoutube', () => {
-    const url = prompt('Enter YouTube URL:');
-    if (!url) return;
-    const id = getYouTubeId(url);
-    if (!id) {
-        alert('Could not parse YouTube video ID from that URL');
+// --- YouTube Modal & Library ---
+
+const YT_LIBRARY_KEY = 'ytLibrary';
+
+function loadYtLibrary() {
+    try { return JSON.parse(localStorage.getItem(YT_LIBRARY_KEY)) || []; }
+    catch { return []; }
+}
+
+function saveYtLibrary(lib) {
+    localStorage.setItem(YT_LIBRARY_KEY, JSON.stringify(lib));
+}
+
+function renderYtLibrary() {
+    const container = document.getElementById('yt-library');
+    const library = loadYtLibrary();
+    container.innerHTML = '';
+
+    const toggleAll = document.getElementById('yt-toggle-all');
+    if (toggleAll) toggleAll.style.display = library.length ? '' : 'none';
+
+    if (library.length === 0) {
+        const empty = document.createElement('div');
+        empty.className = 'yt-empty';
+        empty.textContent = 'no videos yet';
+        container.append(empty);
+        updateYtPlayBtn();
         return;
     }
+
+    library.forEach(video => {
+        const item = document.createElement('div');
+        item.className = 'yt-item';
+        item.dataset.id = video.id;
+        item.draggable = true;
+
+        const grip = document.createElement('span');
+        grip.className = 'yt-grip';
+        grip.textContent = '\u2261';
+
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.className = 'yt-check';
+
+        const thumb = document.createElement('img');
+        thumb.className = 'yt-thumb';
+        thumb.src = `https://img.youtube.com/vi/${video.id}/default.jpg`;
+        thumb.alt = '';
+        thumb.loading = 'lazy';
+
+        const label = document.createElement('span');
+        label.className = 'yt-id';
+        label.textContent = video.id;
+
+        const del = document.createElement('button');
+        del.className = 'yt-del';
+        del.textContent = '\u00d7';
+        on(del, 'click', e => {
+            e.stopPropagation();
+            const lib = loadYtLibrary().filter(v => v.id !== video.id);
+            saveYtLibrary(lib);
+            renderYtLibrary();
+        });
+
+        on(item, 'click', e => {
+            if (e.target !== checkbox && e.target !== del && e.target !== grip) {
+                checkbox.checked = !checkbox.checked;
+            }
+            updateYtPlayBtn();
+        });
+
+        on(item, 'dragstart', e => {
+            item.classList.add('yt-dragging');
+            e.dataTransfer.effectAllowed = 'move';
+            e.dataTransfer.setData('text/plain', video.id);
+        });
+
+        on(item, 'dragend', () => {
+            item.classList.remove('yt-dragging');
+            container.querySelectorAll('.yt-drag-over').forEach(el => el.classList.remove('yt-drag-over'));
+        });
+
+        on(item, 'dragover', e => {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+            const dragging = container.querySelector('.yt-dragging');
+            if (dragging && dragging !== item) {
+                item.classList.add('yt-drag-over');
+            }
+        });
+
+        on(item, 'dragleave', () => {
+            item.classList.remove('yt-drag-over');
+        });
+
+        on(item, 'drop', e => {
+            e.preventDefault();
+            item.classList.remove('yt-drag-over');
+            const draggedId = e.dataTransfer.getData('text/plain');
+            if (draggedId && draggedId !== video.id) {
+                const lib = loadYtLibrary();
+                const fromIdx = lib.findIndex(v => v.id === draggedId);
+                const toIdx = lib.findIndex(v => v.id === video.id);
+                if (fromIdx !== -1 && toIdx !== -1) {
+                    const [moved] = lib.splice(fromIdx, 1);
+                    lib.splice(toIdx, 0, moved);
+                    saveYtLibrary(lib);
+                    renderYtLibrary();
+                }
+            }
+        });
+
+        item.append(grip, checkbox, thumb, label, del);
+        container.append(item);
+    });
+
+    updateYtPlayBtn();
+}
+
+function getSelectedYtIds() {
+    const ids = [];
+    document.querySelectorAll('#yt-library .yt-item').forEach(item => {
+        if (item.querySelector('.yt-check').checked) {
+            ids.push(item.dataset.id);
+        }
+    });
+    return ids;
+}
+
+function updateYtPlayBtn() {
+    const btn = document.getElementById('yt-play');
+    const count = getSelectedYtIds().length;
+    btn.textContent = count > 0 ? `PLAY ${count} VIDEO${count > 1 ? 'S' : ''}` : 'PLAY';
+    btn.classList.toggle('yt-btn-disabled', count === 0);
+}
+
+function playYouTubeVideos(ids) {
+    if (ids.length === 0) return;
     clearBackground();
     const iframe = document.createElement('iframe');
     iframe.className = 'bg-youtube';
-    iframe.src = `https://www.youtube-nocookie.com/embed/${id}?autoplay=1&loop=1&mute=1&controls=0&showinfo=0&rel=0&modestbranding=1&iv_load_policy=3&disablekb=1&playlist=${id}&playsinline=1`;
+    const first = ids[0];
+    iframe.src = `https://www.youtube-nocookie.com/embed/${first}?autoplay=1&loop=1&mute=1&controls=0&showinfo=0&rel=0&modestbranding=1&iv_load_policy=3&disablekb=1&playlist=${ids.join(',')}&playsinline=1`;
     iframe.allow = 'autoplay; encrypted-media';
     iframe.setAttribute('frameborder', '0');
     iframe.style.display = 'block';
     document.body.insertBefore(iframe, document.getElementById('display'));
     bgElement = iframe;
     activateBackground();
+}
+
+function openYtModal() {
+    renderYtLibrary();
+    show('#yt-modal');
+    const input = document.getElementById('yt-url');
+    input.value = '';
+    input.focus();
+    hide('#yt-error');
+}
+
+function closeYtModal() {
+    hide('#yt-modal');
+}
+
+function addYtVideo() {
+    const input = document.getElementById('yt-url');
+    const url = input.value.trim();
+    if (!url) return;
+
+    const id = getYouTubeId(url);
+    if (!id) {
+        show('#yt-error');
+        return;
+    }
+
+    hide('#yt-error');
+    const library = loadYtLibrary();
+
+    if (library.some(v => v.id === id)) {
+        const existing = document.querySelector(`#yt-library .yt-item[data-id="${id}"]`);
+        if (existing) {
+            existing.classList.remove('yt-flash');
+            void existing.offsetWidth;
+            existing.classList.add('yt-flash');
+        }
+        input.value = '';
+        return;
+    }
+
+    library.unshift({ id, url, addedAt: Date.now() });
+    saveYtLibrary(library);
+    input.value = '';
+    renderYtLibrary();
+}
+
+Settings.onChange('bgYoutube', openYtModal);
+
+on('#yt-close', 'click', closeYtModal);
+on('#yt-modal', 'click', e => { if (e.target.id === 'yt-modal') closeYtModal(); });
+on('#yt-add', 'click', addYtVideo);
+on('#yt-url', 'keydown', e => { if (e.key === 'Enter') addYtVideo(); });
+on('#yt-play', 'click', () => {
+    const ids = getSelectedYtIds();
+    if (ids.length > 0) {
+        playYouTubeVideos(ids);
+        closeYtModal();
+    }
+});
+on('#yt-clear', 'click', () => {
+    clearBackground();
+    closeYtModal();
+});
+on('#yt-toggle-all', 'click', () => {
+    const checks = document.querySelectorAll('#yt-library .yt-check');
+    const allChecked = [...checks].every(c => c.checked);
+    checks.forEach(c => { c.checked = !allChecked; });
+    updateYtPlayBtn();
 });
 
 Settings.onChange('bgVideoFile', () => {
@@ -546,7 +733,12 @@ Settings.onChange('bgRemove', () => {
     select.append(defaultOpt);
     label.append(select);
     div.append(label);
-    document.getElementById('settings').append(div);
+    const bgSection = document.querySelector('.settings-section[data-section="background"]');
+    if (bgSection) {
+        bgSection.parentNode.insertBefore(div, bgSection);
+    } else {
+        document.getElementById('settings-body').append(div);
+    }
 
     on(select, 'focus', async () => {
         const devices = await Audio.listAudioInputs();

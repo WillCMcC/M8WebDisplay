@@ -5,6 +5,10 @@
 @use '../build/font1';
 @use '../build/font2';
 
+html {
+    overflow: hidden;
+}
+
 body {
     font-family: sans-serif;
     background-color: #000;
@@ -15,6 +19,7 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
+    overflow: hidden;
 }
 
 a, a:visited {

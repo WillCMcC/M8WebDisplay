@@ -197,6 +197,8 @@ export class Renderer {
         this._blitShader = this._buildProgram(gl, 'blit');
         gl.useProgram(this._blitShader);
         gl.uniform1i(gl.getUniformLocation(this._blitShader, 'src'), 0);
+        this._blitBgColorLoc = gl.getUniformLocation(this._blitShader, 'bgColor');
+        this._blitBgTransparentLoc = gl.getUniformLocation(this._blitShader, 'bgTransparent');
     }
 
     _renderRects(gl) {
@@ -226,6 +228,8 @@ export class Renderer {
         gl.bindFramebuffer(gl.FRAMEBUFFER, null);
         gl.disable(gl.BLEND);
         gl.useProgram(this._blitShader);
+        gl.uniform3fv(this._blitBgColorLoc, this._bg);
+        gl.uniform1i(this._blitBgTransparentLoc, this._bgTransparent ? 1 : 0);
         gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
         gl.enable(gl.BLEND);
     }
@@ -242,6 +246,13 @@ export class Renderer {
             this._bg = [r / 255, g / 255, b / 255];
             this._rectCount = 0;
             this._rectsClear = true;
+
+            if (this._textChars) {
+                this._textChars.fill(0);
+                this._textChars.updated = true;
+            }
+
+            this._waveOn = false;
 
         } else if (this._rectCount < MAX_RECTS) {
             const i = this._rectCount;

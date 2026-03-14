@@ -77,8 +77,15 @@
         <p class="build">Build BUILDNUM</p>
     </div>
 
+    <button id="menu-button">Menu</button>
     <div id="settings" class="hidden">
-        <button id="menu-button">Menu</button>
+        <div class="settings-content">
+            <div class="settings-header">
+                <span>SETTINGS</span>
+                <button id="settings-close">&times;</button>
+            </div>
+            <div id="settings-body"></div>
+        </div>
     </div>
 
     <div id="reload" class="hidden">
@@ -86,6 +93,29 @@
     </div>
 
     <div id="capture-shield"></div>
+
+    <div id="yt-modal" class="hidden">
+        <div class="yt-content">
+            <div class="yt-header">
+                <span>YOUTUBE</span>
+                <button id="yt-close">&times;</button>
+            </div>
+            <div class="yt-input-row">
+                <input type="text" id="yt-url" placeholder="paste url" spellcheck="false" autocomplete="off">
+                <button id="yt-add">ADD</button>
+            </div>
+            <div id="yt-error" class="yt-error hidden">invalid youtube url</div>
+            <div class="yt-section">
+                <span class="yt-section-label">LIBRARY</span>
+                <span id="yt-toggle-all" class="yt-toggle-all">ALL</span>
+            </div>
+            <div id="yt-library"></div>
+            <div class="yt-actions">
+                <button id="yt-play" class="yt-btn-disabled">PLAY</button>
+                <button id="yt-clear">CLEAR BG</button>
+            </div>
+        </div>
+    </div>
 
     <div id="firmware" class="hidden">
         <p class="select-file-msg">Select a firmware file</p>

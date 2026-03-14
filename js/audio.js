@@ -6,6 +6,7 @@ import { wait, on, off } from './util.js';
 let ctx;
 let source;
 let analyser;
+let analyserWanted = false;
 let enabled = true;
 let selectedDeviceId = null;
 
@@ -14,6 +15,7 @@ export function getAnalyser() {
 }
 
 export function enableAnalyser() {
+    analyserWanted = true;
     if (!ctx || !source || analyser) return;
     analyser = ctx.createAnalyser();
     analyser.fftSize = 2048;
@@ -22,6 +24,7 @@ export function enableAnalyser() {
 }
 
 export function disableAnalyser() {
+    analyserWanted = false;
     if (!analyser) return;
     analyser.disconnect();
     analyser = null;
@@ -87,6 +90,8 @@ export async function start(attempts = 1) {
 
         source = ctx.createMediaStreamSource(stream);
         source.connect(ctx.destination);
+
+        if (analyserWanted) enableAnalyser();
 
         if (ctx.state !== 'running') {
             waitForUserGesture();

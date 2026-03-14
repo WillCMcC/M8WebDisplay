@@ -27,7 +27,7 @@ endif
 
 index.html: build/index.css js/main.js
 
-js/main.js: $(filter-out js/main.js,$(wildcard js/*.js)) build/shaders.js build/font1.js build/font2.js
+js/main.js: $(filter-out js/main.js,$(wildcard js/*.js)) build/shaders.js build/font1.js build/font2.js build/font3.js build/font4.js build/font5.js
 	@touch $@
 
 build/shaders.js: $(wildcard shaders/*.vert) $(wildcard shaders/*.frag)
@@ -49,6 +49,21 @@ build/font2.js: font2.png
 	@echo Building $@
 	@mkdir -p $(@D)
 	@printf "export const font2 = 'data:image/png;base64,$$($(BASE64) $^)';" > $@
+
+build/font3.js: font3.png
+	@echo Building $@
+	@mkdir -p $(@D)
+	@printf "export const font3 = 'data:image/png;base64,$$($(BASE64) $^)';" > $@
+
+build/font4.js: font4.png
+	@echo Building $@
+	@mkdir -p $(@D)
+	@printf "export const font4 = 'data:image/png;base64,$$($(BASE64) $^)';" > $@
+
+build/font5.js: font5.png
+	@echo Building $@
+	@mkdir -p $(@D)
+	@printf "export const font5 = 'data:image/png;base64,$$($(BASE64) $^)';" > $@
 
 build/main.js: js/main.js $(NPM)
 	@echo Building $@

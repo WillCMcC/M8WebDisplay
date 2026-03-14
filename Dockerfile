@@ -4,6 +4,7 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm ci
 COPY . .
+RUN git init && git config user.email "build@build" && git config user.name "build" && git add -A && git commit -m "build"
 RUN make all
 
 FROM nginx:alpine

@@ -161,6 +161,8 @@ export class Renderer {
             this._rects.length = 0;
             this._backgroundColour = colour;
             this._onBackgroundChanged(r, g, b);
+            this._waveOn = false;
+            this._waveUpdated = true;
         }
         if(this._fontId == 1) {
             y += (this._fontConfig[this._fontId][3]);

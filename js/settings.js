@@ -11,36 +11,54 @@ on('#settings', 'click', e => {
     }
 });
 
+on('#settings-close', 'click', () => hide('#settings'));
+
+on(document, 'keydown', e => {
+    if (e.key === 'Escape') hide('#settings');
+});
+
 const actions = {};
 const values = {};
 
-setupToggle('showControls', 'Show Controls', false);
-setupToggle('hideMenu', 'Hide Menu', false);
-setupToggle('enableAudio', 'Enable Audio', true);
-
+setupSection('DISPLAY');
 setupSelect(
     'displayType',
     'Display Type',
     { webgl2: 'WebGL2', old: 'Canvas + SVG' },
     'webgl2');
-
 setupToggle('snapPixels', 'Snap Pixels', true);
-setupToggle('virtualKeyboard', 'Virtual Keyboard', true);
-setupToggle('preventSleep', 'Prevent Sleep', false);
-setupButton('bgYoutube', 'BG: YouTube');
-setupButton('bgVideoFile', 'BG: Video File');
-setupButton('bgCamera', 'BG: Camera');
-setupButton('bgRemove', 'BG: Remove');
-setupButton('reactivity', 'Reactivity');
-setupButton('controlMapping', 'Control Mapping');
-setupButton('firmware', 'Load Firmware');
 setupButton('fullscreen', 'Fullscreen');
-setupButton('about', 'About');
+
+setupSection('INPUT');
+setupToggle('showControls', 'Show Controls', false);
+setupToggle('virtualKeyboard', 'Virtual Keyboard', true);
+
+setupSection('AUDIO');
+setupToggle('enableAudio', 'Enable Audio', true);
+
+setupSection('BACKGROUND');
+setupButton('bgYoutube', 'YouTube');
+setupButton('bgVideoFile', 'Video File');
+setupButton('bgCamera', 'Camera');
+setupButton('bgRemove', 'Remove');
+setupButton('reactivity', 'Reactivity');
+
+setupSection('SYSTEM');
+setupToggle('preventSleep', 'Prevent Sleep', false);
+setupToggle('hideMenu', 'Hide Menu', false);
 
 onChange('hideMenu', value => document
-    .getElementById('settings')
+    .getElementById('menu-button')
     .classList
     .toggle('auto-hide', value));
+
+function setupSection(title) {
+    const div = document.createElement('div');
+    div.className = 'settings-section';
+    div.dataset.section = title.toLowerCase();
+    div.textContent = title;
+    document.getElementById('settings-body').append(div);
+}
 
 function setupToggle(setting, title, defaultValue) {
     const value = load(setting, defaultValue);
@@ -59,7 +77,7 @@ function setupToggle(setting, title, defaultValue) {
         save(setting, input.checked));
 
     document
-        .getElementById('settings')
+        .getElementById('settings-body')
         .append(div);
 }
 
@@ -87,7 +105,7 @@ function setupSelect(setting, title, options, defaultValue) {
         save(setting, select.value));
 
     document
-        .getElementById('settings')
+        .getElementById('settings-body')
         .append(div);
 }
 
@@ -100,7 +118,7 @@ function setupButton(setting, title) {
     });
 
     document
-        .getElementById('settings')
+        .getElementById('settings-body')
         .append(div);
 }
 
