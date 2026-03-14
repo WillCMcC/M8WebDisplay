@@ -187,10 +187,25 @@ function buildReactivityPanel() {
     panel.id = 'reactivity';
     panel.classList.add('hidden');
 
+    // Click backdrop to close
+    on(panel, 'click', e => { if (e.target === panel) panel.classList.add('hidden'); });
+
+    const content = document.createElement('div');
+    content.className = 'fx-panel';
+
     const header = document.createElement('div');
     header.className = 'fx-header';
-    header.textContent = 'REACTIVITY';
-    panel.append(header);
+    const headerText = document.createElement('span');
+    headerText.textContent = 'REACTIVITY';
+    const headerClose = document.createElement('button');
+    headerClose.className = 'fx-close';
+    headerClose.innerHTML = '&times;';
+    on(headerClose, 'click', () => panel.classList.add('hidden'));
+    header.append(headerText, headerClose);
+    content.append(header);
+
+    const body = document.createElement('div');
+    body.className = 'fx-body';
 
     let lastGroup = '';
     for (const s of fxSliders) {
@@ -198,7 +213,7 @@ function buildReactivityPanel() {
             const groupLabel = document.createElement('div');
             groupLabel.className = 'fx-group';
             groupLabel.textContent = s.group === 'canvas' ? 'DISPLAY' : 'BACKGROUND';
-            panel.append(groupLabel);
+            body.append(groupLabel);
             lastGroup = s.group;
         }
 
@@ -227,8 +242,10 @@ function buildReactivityPanel() {
         });
 
         row.append(label, input, val);
-        panel.append(row);
+        body.append(row);
     }
+
+    content.append(body);
 
     const btnRow = document.createElement('div');
     btnRow.className = 'fx-buttons';
@@ -240,7 +257,7 @@ function buildReactivityPanel() {
             fx[s.key] = s.default;
             Settings.save('fx_' + s.key, s.default);
         });
-        panel.querySelectorAll('.fx-row').forEach((row, i) => {
+        body.querySelectorAll('.fx-row').forEach((row, i) => {
             row.querySelector('input').value = fxSliders[i].default;
             row.querySelector('.fx-val').textContent = fxSliders[i].default;
         });
@@ -251,8 +268,9 @@ function buildReactivityPanel() {
     on(closeBtn, 'click', () => panel.classList.add('hidden'));
 
     btnRow.append(resetBtn, closeBtn);
-    panel.append(btnRow);
+    content.append(btnRow);
 
+    panel.append(content);
     document.body.append(panel);
     return panel;
 }
@@ -467,6 +485,7 @@ on(document, 'keydown', e => {
     }
     if (e.key === 'Escape') {
         closeYtModal();
+        reactivityPanel.classList.add('hidden');
     }
 });
 
