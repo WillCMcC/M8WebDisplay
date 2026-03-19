@@ -203,8 +203,7 @@
         }
     }
 
-    &:hover .resize-handle,
-    &.custom-position .resize-handle {
+    &:hover .resize-handle {
         opacity: 1;
     }
 }
