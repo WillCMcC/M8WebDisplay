@@ -28,6 +28,7 @@ setupSelect(
     'webgl2');
 setupToggle('snapPixels', 'Snap Pixels', true);
 setupButton('fullscreen', 'Fullscreen');
+setupButton('resetPosition', 'Reset Position');
 
 setupSection('INPUT');
 setupToggle('showControls', 'Show Controls', false);
@@ -40,6 +41,7 @@ setupSection('BACKGROUND');
 setupButton('bgYoutube', 'YouTube');
 setupButton('bgVideoFile', 'Video File');
 setupButton('bgCamera', 'Camera');
+setupButton('bgScreenShare', 'Screen Share');
 setupButton('bgRemove', 'Remove');
 setupButton('reactivity', 'Reactivity');
 

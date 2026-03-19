@@ -287,6 +287,131 @@ const scanlineOverlay = document.createElement('div');
 scanlineOverlay.id = 'scanlines';
 document.getElementById('display').append(scanlineOverlay);
 
+// --- Display Drag & Resize ---
+
+const DISPLAY_POS_KEY = 'displayPos';
+
+function loadDisplayPos() {
+    try { return JSON.parse(localStorage.getItem(DISPLAY_POS_KEY)); }
+    catch { return null; }
+}
+
+function saveDisplayPos(pos) {
+    localStorage.setItem(DISPLAY_POS_KEY, JSON.stringify(pos));
+}
+
+function applyCustomPosition(pos) {
+    displayEl.classList.add('custom-position');
+    displayEl.style.left = pos.x + 'px';
+    displayEl.style.top = pos.y + 'px';
+    displayEl.style.width = pos.w + 'px';
+    displayEl.style.height = pos.h + 'px';
+}
+
+function clearCustomPosition() {
+    displayEl.classList.remove('custom-position', 'dragging');
+    displayEl.style.left = '';
+    displayEl.style.top = '';
+    displayEl.style.width = '';
+    displayEl.style.height = '';
+    localStorage.removeItem(DISPLAY_POS_KEY);
+    resizeCanvas();
+}
+
+function getDisplayRect() {
+    const saved = loadDisplayPos();
+    if (saved) return saved;
+    const r = displayEl.getBoundingClientRect();
+    return { x: r.left, y: r.top, w: r.width, h: r.height };
+}
+
+// Create resize handles
+['nw', 'ne', 'sw', 'se'].forEach(dir => {
+    const handle = document.createElement('div');
+    handle.className = `resize-handle ${dir}`;
+    displayEl.append(handle);
+
+    on(handle, 'mousedown', e => {
+        e.preventDefault();
+        e.stopPropagation();
+        const startRect = getDisplayRect();
+        if (!displayEl.classList.contains('custom-position')) {
+            applyCustomPosition(startRect);
+        }
+        const e0x = e.clientX, e0y = e.clientY;
+
+        function onMove(ev) {
+            const dx = ev.clientX - e0x;
+            const dy = ev.clientY - e0y;
+            let { x, y, w, h } = startRect;
+
+            if (dir.includes('e')) w += dx;
+            if (dir.includes('w')) { w -= dx; x += dx; }
+            if (dir.includes('s')) h += dy;
+            if (dir.includes('n')) { h -= dy; y += dy; }
+
+            if (w < 160) { if (dir.includes('w')) x = startRect.x + startRect.w - 160; w = 160; }
+            if (h < 120) { if (dir.includes('n')) y = startRect.y + startRect.h - 120; h = 120; }
+
+            const pos = { x, y, w, h };
+            applyCustomPosition(pos);
+            saveDisplayPos(pos);
+            resizeCanvas();
+        }
+
+        function onUp() {
+            window.removeEventListener('mousemove', onMove);
+            window.removeEventListener('mouseup', onUp);
+        }
+
+        window.addEventListener('mousemove', onMove);
+        window.addEventListener('mouseup', onUp);
+    });
+});
+
+// Drag display by clicking on canvas area
+on(displayEl, 'mousedown', e => {
+    if (e.button !== 0) return;
+    if (e.target.closest('.resize-handle, #controls, #buttons, #mapping-buttons, #mapping-help, button, a, input, select')) return;
+
+    const e0x = e.clientX, e0y = e.clientY;
+    const startRect = getDisplayRect();
+    let dragging = false;
+
+    function onMove(ev) {
+        const dx = ev.clientX - e0x;
+        const dy = ev.clientY - e0y;
+
+        if (!dragging) {
+            if (Math.abs(dx) < 5 && Math.abs(dy) < 5) return;
+            dragging = true;
+            if (!displayEl.classList.contains('custom-position')) {
+                applyCustomPosition(startRect);
+            }
+            displayEl.classList.add('dragging');
+        }
+
+        const pos = { x: startRect.x + dx, y: startRect.y + dy, w: startRect.w, h: startRect.h };
+        applyCustomPosition(pos);
+        saveDisplayPos(pos);
+    }
+
+    function onUp() {
+        displayEl.classList.remove('dragging');
+        window.removeEventListener('mousemove', onMove);
+        window.removeEventListener('mouseup', onUp);
+    }
+
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+});
+
+// Restore saved display position
+const savedDisplayPos = loadDisplayPos();
+if (savedDisplayPos) applyCustomPosition(savedDisplayPos);
+
+Settings.onChange('resetPosition', clearCustomPosition);
+
 // --- Background Video ---
 
 function ensureBgVideo() {
@@ -731,6 +856,23 @@ Settings.onChange('bgCamera', () => {
         .catch(err => {
             console.error('Camera access denied:', err);
             alert('Could not access camera');
+        });
+});
+
+Settings.onChange('bgScreenShare', () => {
+    navigator.mediaDevices.getDisplayMedia({ video: true, audio: false })
+        .then(stream => {
+            clearBackground();
+            const v = ensureBgVideo();
+            v.srcObject = stream;
+            v.style.display = 'block';
+            v.play();
+            bgElement = v;
+            activateBackground();
+            stream.getVideoTracks()[0].addEventListener('ended', () => clearBackground());
+        })
+        .catch(err => {
+            console.error('Screen share denied:', err);
         });
 });
 

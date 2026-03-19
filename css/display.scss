@@ -155,6 +155,58 @@
             }
         }
     }
+
+    &.custom-position {
+        position: fixed;
+        margin: 0;
+        max-width: none;
+        max-height: none;
+        z-index: 10;
+        cursor: grab;
+
+        &.dragging {
+            cursor: grabbing;
+            user-select: none;
+        }
+    }
+
+    .resize-handle {
+        position: absolute;
+        width: 18px;
+        height: 18px;
+        z-index: 10;
+        opacity: 0;
+        transition: opacity 150ms;
+
+        &::before, &::after {
+            content: '';
+            position: absolute;
+            background: $m8;
+            border-radius: 1px;
+        }
+
+        &.nw { top: -4px; left: -4px; cursor: nw-resize;
+            &::before { top: 0; left: 0; width: 12px; height: 2px; }
+            &::after { top: 0; left: 0; width: 2px; height: 12px; }
+        }
+        &.ne { top: -4px; right: -4px; cursor: ne-resize;
+            &::before { top: 0; right: 0; width: 12px; height: 2px; }
+            &::after { top: 0; right: 0; width: 2px; height: 12px; }
+        }
+        &.sw { bottom: -4px; left: -4px; cursor: sw-resize;
+            &::before { bottom: 0; left: 0; width: 12px; height: 2px; }
+            &::after { bottom: 0; left: 0; width: 2px; height: 12px; }
+        }
+        &.se { bottom: -4px; right: -4px; cursor: se-resize;
+            &::before { bottom: 0; right: 0; width: 12px; height: 2px; }
+            &::after { bottom: 0; right: 0; width: 2px; height: 12px; }
+        }
+    }
+
+    &:hover .resize-handle,
+    &.custom-position .resize-handle {
+        opacity: 1;
+    }
 }
 
 #bg-video, .bg-youtube {
