@@ -151,18 +151,42 @@ function setupConnection(connection, errorMessage) {
 
 on('#info button', 'click', () => hide('#info'));
 
-// --- Background Video ---
+// --- Background Sources ---
 
 const canvasEl = document.getElementById('canvas');
 const displayEl = document.getElementById('display');
-let bgVideo = null;
-let videoInput = null;
-let bgElement = null;
+const bgContainer = document.getElementById('bg-sources');
 let bgAnimating = false;
 let smoothedRms = 0;
 let peakRms = 0;
-let bgInvert = false;
 const analyserData = new Uint8Array(2048);
+
+const sources = [];
+let nextSourceId = 1;
+
+function createSource(type, opts = {}) {
+    return {
+        id: nextSourceId++,
+        type,
+        mode: 'fullscreen',
+        opacity: 100,
+        invert: false,
+        pos: null,
+        element: null,
+        wrapper: null,
+        label: opts.label || type.toUpperCase(),
+        ytIds: opts.ytIds || [],
+    };
+}
+
+function saveSources() {
+    const data = sources.map(s => ({
+        id: s.id, type: s.type, mode: s.mode,
+        opacity: s.opacity, invert: s.invert,
+        pos: s.pos, label: s.label, ytIds: s.ytIds,
+    }));
+    localStorage.setItem('bgSources', JSON.stringify(data));
+}
 
 // --- Reactivity FX Config ---
 
@@ -182,48 +206,128 @@ const fxSliders = [
 const fx = {};
 fxSliders.forEach(s => { fx[s.key] = Settings.load('fx_' + s.key, s.default); });
 
-// --- Reactivity Panel ---
+// --- Mixer Panel ---
 
-function buildReactivityPanel() {
+function buildMixerPanel() {
     const panel = document.createElement('div');
-    panel.id = 'reactivity';
+    panel.id = 'mixer';
     panel.classList.add('hidden');
 
-    // Click backdrop to close
-    on(panel, 'click', e => { if (e.target === panel) panel.classList.add('hidden'); });
-
     const content = document.createElement('div');
-    content.className = 'fx-panel';
+    content.className = 'mixer-panel';
 
+    // Header
     const header = document.createElement('div');
-    header.className = 'fx-header';
+    header.className = 'mixer-header';
     const headerText = document.createElement('span');
-    headerText.textContent = 'REACTIVITY';
+    headerText.textContent = 'MIXER';
     const headerClose = document.createElement('button');
-    headerClose.className = 'fx-close';
+    headerClose.className = 'mixer-close';
     headerClose.innerHTML = '&times;';
     on(headerClose, 'click', () => panel.classList.add('hidden'));
     header.append(headerText, headerClose);
     content.append(header);
 
     const body = document.createElement('div');
-    body.className = 'fx-body';
+    body.className = 'mixer-body';
+
+    // --- SOURCES section ---
+    const srcGroup = document.createElement('div');
+    srcGroup.className = 'mixer-group';
+    srcGroup.textContent = 'SOURCES';
+    body.append(srcGroup);
+
+    const srcList = document.createElement('div');
+    srcList.id = 'mixer-sources';
+    body.append(srcList);
+
+    // Add buttons
+    const addRow = document.createElement('div');
+    addRow.className = 'mixer-add-row';
+    for (const [label, action] of [['+ YT', 'youtube'], ['+ CAM', 'camera'], ['+ SCREEN', 'screen'], ['+ FILE', 'file']]) {
+        const b = document.createElement('button');
+        b.textContent = label;
+        on(b, 'click', () => addSource(action));
+        addRow.append(b);
+    }
+    body.append(addRow);
+
+    // --- YouTube inline sub-panel ---
+    const ytPanel = document.createElement('div');
+    ytPanel.id = 'mixer-yt';
+    ytPanel.className = 'hidden';
+
+    const ytInputRow = document.createElement('div');
+    ytInputRow.className = 'yt-input-row';
+    const ytUrlInput = document.createElement('input');
+    ytUrlInput.type = 'text';
+    ytUrlInput.id = 'yt-url';
+    ytUrlInput.placeholder = 'paste url';
+    ytUrlInput.spellcheck = false;
+    ytUrlInput.autocomplete = 'off';
+    const ytAddBtn = document.createElement('button');
+    ytAddBtn.id = 'yt-add';
+    ytAddBtn.textContent = 'ADD';
+    ytInputRow.append(ytUrlInput, ytAddBtn);
+    ytPanel.append(ytInputRow);
+
+    const ytError = document.createElement('div');
+    ytError.id = 'yt-error';
+    ytError.className = 'yt-error hidden';
+    ytError.textContent = 'invalid youtube url';
+    ytPanel.append(ytError);
+
+    const ytSection = document.createElement('div');
+    ytSection.className = 'yt-section';
+    const ytSectionLabel = document.createElement('span');
+    ytSectionLabel.className = 'yt-section-label';
+    ytSectionLabel.textContent = 'LIBRARY';
+    const ytToggleAll = document.createElement('span');
+    ytToggleAll.id = 'yt-toggle-all';
+    ytToggleAll.className = 'yt-toggle-all';
+    ytToggleAll.textContent = 'ALL';
+    ytSection.append(ytSectionLabel, ytToggleAll);
+    ytPanel.append(ytSection);
+
+    const ytLib = document.createElement('div');
+    ytLib.id = 'yt-library';
+    ytPanel.append(ytLib);
+
+    const ytActions = document.createElement('div');
+    ytActions.className = 'yt-actions';
+    const ytPlayBtn = document.createElement('button');
+    ytPlayBtn.id = 'yt-play';
+    ytPlayBtn.className = 'yt-btn-disabled';
+    ytPlayBtn.textContent = 'ADD SOURCE';
+    const ytCancelBtn = document.createElement('button');
+    ytCancelBtn.id = 'yt-cancel';
+    ytCancelBtn.textContent = 'CANCEL';
+    ytActions.append(ytPlayBtn, ytCancelBtn);
+    ytPanel.append(ytActions);
+
+    body.append(ytPanel);
+
+    // --- REACTIVITY section ---
+    const fxGroup = document.createElement('div');
+    fxGroup.className = 'mixer-group';
+    fxGroup.textContent = 'REACTIVITY';
+    body.append(fxGroup);
 
     let lastGroup = '';
     for (const s of fxSliders) {
         if (s.group !== lastGroup) {
-            const groupLabel = document.createElement('div');
-            groupLabel.className = 'fx-group';
-            groupLabel.textContent = s.group === 'canvas' ? 'DISPLAY' : 'BACKGROUND';
-            body.append(groupLabel);
+            const subGroup = document.createElement('div');
+            subGroup.className = 'mixer-subgroup';
+            subGroup.textContent = s.group === 'canvas' ? 'DISPLAY' : 'BACKGROUND';
+            body.append(subGroup);
             lastGroup = s.group;
         }
 
         const row = document.createElement('div');
-        row.className = 'fx-row';
+        row.className = 'mixer-fx-row';
 
         const label = document.createElement('span');
-        label.className = 'fx-label';
+        label.className = 'mixer-fx-label';
         label.textContent = s.label;
 
         const input = document.createElement('input');
@@ -233,7 +337,7 @@ function buildReactivityPanel() {
         input.value = fx[s.key];
 
         const val = document.createElement('span');
-        val.className = 'fx-val';
+        val.className = 'mixer-fx-val';
         val.textContent = fx[s.key];
 
         on(input, 'input', () => {
@@ -247,40 +351,52 @@ function buildReactivityPanel() {
         body.append(row);
     }
 
-    content.append(body);
-
-    const btnRow = document.createElement('div');
-    btnRow.className = 'fx-buttons';
-
+    const fxBtnRow = document.createElement('div');
+    fxBtnRow.className = 'mixer-fx-buttons';
     const resetBtn = document.createElement('button');
-    resetBtn.textContent = 'RESET';
+    resetBtn.textContent = 'RESET FX';
     on(resetBtn, 'click', () => {
         fxSliders.forEach(s => {
             fx[s.key] = s.default;
             Settings.save('fx_' + s.key, s.default);
         });
-        body.querySelectorAll('.fx-row').forEach((row, i) => {
+        body.querySelectorAll('.mixer-fx-row').forEach((row, i) => {
             row.querySelector('input').value = fxSliders[i].default;
-            row.querySelector('.fx-val').textContent = fxSliders[i].default;
+            row.querySelector('.mixer-fx-val').textContent = fxSliders[i].default;
         });
     });
+    fxBtnRow.append(resetBtn);
+    body.append(fxBtnRow);
 
-    const closeBtn = document.createElement('button');
-    closeBtn.textContent = 'CLOSE';
-    on(closeBtn, 'click', () => panel.classList.add('hidden'));
-
-    btnRow.append(resetBtn, closeBtn);
-    content.append(btnRow);
-
+    content.append(body);
     panel.append(content);
     document.body.append(panel);
+
+    // Wire YouTube events
+    on(ytAddBtn, 'click', addYtVideo);
+    on(ytUrlInput, 'keydown', e => { if (e.key === 'Enter') addYtVideo(); });
+    on(ytPlayBtn, 'click', () => {
+        const ids = getSelectedYtIds();
+        if (ids.length > 0) {
+            addYouTubeSource(ids);
+            hideYtPanel();
+        }
+    });
+    on(ytCancelBtn, 'click', hideYtPanel);
+    on(ytToggleAll, 'click', () => {
+        const checks = document.querySelectorAll('#yt-library .yt-check');
+        const allChecked = [...checks].every(c => c.checked);
+        checks.forEach(c => { c.checked = !allChecked; });
+        updateYtPlayBtn();
+    });
+
     return panel;
 }
 
-const reactivityPanel = buildReactivityPanel();
+const mixerPanel = buildMixerPanel();
 
-Settings.onChange('reactivity', () => {
-    reactivityPanel.classList.toggle('hidden');
+Settings.onChange('mixer', () => {
+    mixerPanel.classList.toggle('hidden');
 });
 
 // --- Scanline Overlay ---
@@ -414,43 +530,165 @@ if (savedDisplayPos) applyCustomPosition(savedDisplayPos);
 
 Settings.onChange('resetPosition', clearCustomPosition);
 
-// --- Background Video ---
+// --- Source Management ---
 
-function ensureBgVideo() {
-    if (bgVideo) return bgVideo;
-    bgVideo = document.createElement('video');
-    bgVideo.id = 'bg-video';
-    bgVideo.loop = true;
-    bgVideo.muted = true;
-    bgVideo.playsInline = true;
-    bgVideo.style.display = 'none';
-    const display = document.getElementById('display');
-    document.body.insertBefore(bgVideo, display);
-    return bgVideo;
+function addSourceElement(source) {
+    const wrapper = document.createElement('div');
+    wrapper.className = 'bg-source';
+    wrapper.dataset.sourceId = source.id;
+    source.wrapper = wrapper;
+    bgContainer.append(wrapper);
+    applySourceLayout(source);
+    return wrapper;
 }
 
-function ensureVideoInput() {
-    if (videoInput) return videoInput;
-    videoInput = document.createElement('input');
-    videoInput.type = 'file';
-    videoInput.accept = 'video/*';
-    videoInput.className = 'hidden';
-    document.body.appendChild(videoInput);
+function applySourceLayout(source) {
+    if (!source.wrapper) return;
+    const w = source.wrapper;
+    w.style.opacity = source.opacity / 100;
 
-    on(videoInput, 'change', () => {
-        const file = videoInput.files[0];
-        if (!file) return;
-        clearBackground();
-        const v = ensureBgVideo();
-        v.src = URL.createObjectURL(file);
-        v.style.display = 'block';
-        v.play();
-        bgElement = v;
-        activateBackground();
+    // Remove old resize handles from wrapper
+    w.querySelectorAll('.resize-handle').forEach(h => h.remove());
+
+    if (source.mode === 'fullscreen') {
+        w.className = 'bg-source bg-source-fullscreen';
+        w.style.left = '';
+        w.style.top = '';
+        w.style.width = '';
+        w.style.height = '';
+        w.style.cursor = '';
+    } else {
+        w.className = 'bg-source bg-source-windowed';
+        if (!source.pos) {
+            const vw = window.innerWidth;
+            const vh = window.innerHeight;
+            source.pos = {
+                x: vw * 0.15 + sources.indexOf(source) * 30,
+                y: vh * 0.15 + sources.indexOf(source) * 30,
+                w: vw * 0.3,
+                h: vh * 0.3,
+            };
+        }
+        w.style.left = source.pos.x + 'px';
+        w.style.top = source.pos.y + 'px';
+        w.style.width = source.pos.w + 'px';
+        w.style.height = source.pos.h + 'px';
+        attachWindowedDrag(source);
+    }
+    w.dataset.sourceId = source.id;
+}
+
+function attachWindowedDrag(source) {
+    const wrapper = source.wrapper;
+
+    ['nw', 'ne', 'sw', 'se'].forEach(dir => {
+        const handle = document.createElement('div');
+        handle.className = `resize-handle ${dir}`;
+        wrapper.append(handle);
+
+        on(handle, 'mousedown', e => {
+            e.preventDefault();
+            e.stopPropagation();
+            const startRect = { ...source.pos };
+            const e0x = e.clientX, e0y = e.clientY;
+
+            function onMove(ev) {
+                const dx = ev.clientX - e0x;
+                const dy = ev.clientY - e0y;
+                let { x, y, w, h } = startRect;
+
+                if (dir.includes('e')) w += dx;
+                if (dir.includes('w')) { w -= dx; x += dx; }
+                if (dir.includes('s')) h += dy;
+                if (dir.includes('n')) { h -= dy; y += dy; }
+
+                if (w < 120) { if (dir.includes('w')) x = startRect.x + startRect.w - 120; w = 120; }
+                if (h < 80) { if (dir.includes('n')) y = startRect.y + startRect.h - 80; h = 80; }
+
+                source.pos = { x, y, w, h };
+                wrapper.style.left = x + 'px';
+                wrapper.style.top = y + 'px';
+                wrapper.style.width = w + 'px';
+                wrapper.style.height = h + 'px';
+                saveSources();
+            }
+
+            function onUp() {
+                window.removeEventListener('mousemove', onMove);
+                window.removeEventListener('mouseup', onUp);
+            }
+            window.addEventListener('mousemove', onMove);
+            window.addEventListener('mouseup', onUp);
+        });
     });
 
-    return videoInput;
+    on(wrapper, 'mousedown', e => {
+        if (e.button !== 0 || e.target.closest('.resize-handle')) return;
+        const e0x = e.clientX, e0y = e.clientY;
+        const startPos = { ...source.pos };
+        let dragging = false;
+
+        function onMove(ev) {
+            const dx = ev.clientX - e0x;
+            const dy = ev.clientY - e0y;
+            if (!dragging) {
+                if (Math.abs(dx) < 5 && Math.abs(dy) < 5) return;
+                dragging = true;
+                wrapper.classList.add('dragging');
+            }
+            source.pos = { ...startPos, x: startPos.x + dx, y: startPos.y + dy };
+            wrapper.style.left = source.pos.x + 'px';
+            wrapper.style.top = source.pos.y + 'px';
+            saveSources();
+        }
+
+        function onUp() {
+            wrapper.classList.remove('dragging');
+            window.removeEventListener('mousemove', onMove);
+            window.removeEventListener('mouseup', onUp);
+        }
+        window.addEventListener('mousemove', onMove);
+        window.addEventListener('mouseup', onUp);
+    });
 }
+
+function removeSource(id) {
+    const idx = sources.findIndex(s => s.id === id);
+    if (idx === -1) return;
+    const source = sources[idx];
+
+    if (source.element) {
+        if (source.element.srcObject) {
+            source.element.srcObject.getTracks().forEach(t => t.stop());
+        }
+        if (source.element.src && source.type === 'file') {
+            URL.revokeObjectURL(source.element.src);
+        }
+    }
+
+    if (source.wrapper) source.wrapper.remove();
+    sources.splice(idx, 1);
+    saveSources();
+
+    if (sources.length === 0) {
+        renderer.setBgTransparent(false);
+        bgAnimating = false;
+        smoothedRms = 0;
+        peakRms = 0;
+        displayEl.style.transform = '';
+        canvasEl.style.filter = '';
+        scanlineOverlay.style.opacity = '0';
+        Audio.disableAnalyser();
+    }
+
+    refreshSourceCards();
+}
+
+function removeAllSources() {
+    while (sources.length > 0) removeSource(sources[0].id);
+}
+
+// --- Source Factories ---
 
 function activateBackground() {
     renderer.setBgTransparent(true);
@@ -458,36 +696,119 @@ function activateBackground() {
     startBgLoop();
 }
 
-function clearBackground() {
-    if (bgVideo) {
-        if (bgVideo.srcObject) {
-            bgVideo.srcObject.getTracks().forEach(t => t.stop());
-            bgVideo.srcObject = null;
-        }
-        if (bgVideo.src) {
-            bgVideo.pause();
-            URL.revokeObjectURL(bgVideo.src);
-            bgVideo.removeAttribute('src');
-        }
-        bgVideo.style.display = 'none';
-    }
-    const ytFrame = document.querySelector('.bg-youtube');
-    if (ytFrame) ytFrame.remove();
-    if (bgElement) {
-        bgElement.style.filter = '';
-        bgElement.style.transform = '';
-    }
-    displayEl.style.transform = '';
-    canvasEl.style.filter = '';
-    scanlineOverlay.style.opacity = '0';
-    renderer.setBgTransparent(false);
-    bgElement = null;
-    bgAnimating = false;
-    bgInvert = false;
-    smoothedRms = 0;
-    peakRms = 0;
-    Audio.disableAnalyser();
+function addYouTubeSource(ids) {
+    const source = createSource('youtube', {
+        label: ids.length === 1 ? ids[0] : `${ids.length} videos`,
+        ytIds: ids,
+    });
+    sources.push(source);
+
+    const iframe = document.createElement('iframe');
+    const first = ids[0];
+    iframe.src = `https://www.youtube-nocookie.com/embed/${first}?autoplay=1&loop=1&mute=1&controls=0&showinfo=0&rel=0&modestbranding=1&iv_load_policy=3&disablekb=1&playlist=${ids.join(',')}&playsinline=1`;
+    iframe.allow = 'autoplay; encrypted-media';
+    iframe.setAttribute('frameborder', '0');
+    source.element = iframe;
+
+    addSourceElement(source);
+    source.wrapper.append(iframe);
+    activateBackground();
+    saveSources();
+    refreshSourceCards();
 }
+
+function addCameraSource() {
+    navigator.mediaDevices.getUserMedia({ video: true, audio: false })
+        .then(stream => {
+            const source = createSource('camera', { label: 'CAMERA' });
+            sources.push(source);
+
+            const video = document.createElement('video');
+            video.loop = true;
+            video.muted = true;
+            video.playsInline = true;
+            video.srcObject = stream;
+            video.play();
+            source.element = video;
+
+            addSourceElement(source);
+            source.wrapper.append(video);
+            activateBackground();
+            saveSources();
+            refreshSourceCards();
+        })
+        .catch(err => {
+            console.error('Camera access denied:', err);
+        });
+}
+
+function addScreenSource() {
+    navigator.mediaDevices.getDisplayMedia({ video: true, audio: false })
+        .then(stream => {
+            const source = createSource('screen', { label: 'SCREEN' });
+            sources.push(source);
+
+            const video = document.createElement('video');
+            video.loop = true;
+            video.muted = true;
+            video.playsInline = true;
+            video.srcObject = stream;
+            video.play();
+            source.element = video;
+
+            addSourceElement(source);
+            source.wrapper.append(video);
+            activateBackground();
+            saveSources();
+            refreshSourceCards();
+
+            stream.getVideoTracks()[0].addEventListener('ended', () => {
+                removeSource(source.id);
+            });
+        })
+        .catch(err => {
+            console.error('Screen share denied:', err);
+        });
+}
+
+function addFileSource() {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'video/*';
+    on(input, 'change', () => {
+        const file = input.files[0];
+        if (!file) return;
+
+        const source = createSource('file', { label: file.name.slice(0, 20) });
+        sources.push(source);
+
+        const video = document.createElement('video');
+        video.loop = true;
+        video.muted = true;
+        video.playsInline = true;
+        video.src = URL.createObjectURL(file);
+        video.play();
+        source.element = video;
+
+        addSourceElement(source);
+        source.wrapper.append(video);
+        activateBackground();
+        saveSources();
+        refreshSourceCards();
+    });
+    input.click();
+}
+
+function addSource(type) {
+    switch (type) {
+        case 'youtube': showYtPanel(); break;
+        case 'camera': addCameraSource(); break;
+        case 'screen': addScreenSource(); break;
+        case 'file': addFileSource(); break;
+    }
+}
+
+// --- Reactive Loop ---
 
 function startBgLoop() {
     if (bgAnimating) return;
@@ -498,7 +819,10 @@ function startBgLoop() {
 let lastPeakHit = 0;
 
 function updateBgReactive() {
-    if (!bgAnimating || !bgElement) return;
+    if (!bgAnimating || sources.length === 0) {
+        bgAnimating = false;
+        return;
+    }
 
     const analyser = Audio.getAnalyser();
     let rms = 0;
@@ -569,11 +893,12 @@ function updateBgReactive() {
     const scanAmt = fx.fxScanlines / 100;
     scanlineOverlay.style.opacity = scanAmt > 0 ? scanAmt * 0.5 : '0';
 
-    // --- Video filters: brightness, blur, saturate ---
+    // --- Per-source background effects ---
     const bgFilters = [];
     const brightAmt = fx.fxBgBright / 100;
     const blurAmt = fx.fxBgBlur / 100;
     const satAmt = fx.fxBgSaturate / 100;
+    const bgZoomAmt = fx.fxBgZoom / 100;
 
     if (brightAmt > 0) {
         const brightness = 0.6 + smoothedRms * brightAmt * 2.0;
@@ -590,40 +915,46 @@ function updateBgReactive() {
         bgFilters.push(`saturate(${saturate})`);
     }
 
-    if (bgInvert) bgFilters.push('invert(1)');
+    const bgFilterStr = bgFilters.length ? bgFilters.join(' ') : '';
+    const bgScale = bgZoomAmt > 0 ? `scale(${1 + smoothedRms * bgZoomAmt * 0.4})` : '';
 
-    bgElement.style.filter = bgFilters.length ? bgFilters.join(' ') : '';
-
-    // --- Video transform: zoom ---
-    const bgZoomAmt = fx.fxBgZoom / 100;
-    if (bgZoomAmt > 0) {
-        const bgScale = 1 + smoothedRms * bgZoomAmt * 0.4;
-        bgElement.style.transform = `scale(${bgScale})`;
-    } else {
-        bgElement.style.transform = '';
+    for (const source of sources) {
+        if (!source.wrapper) continue;
+        const f = source.invert
+            ? (bgFilterStr ? bgFilterStr + ' invert(1)' : 'invert(1)')
+            : bgFilterStr;
+        source.wrapper.style.filter = f;
+        if (source.element) {
+            source.element.style.transform = bgScale;
+        }
     }
 
     requestAnimationFrame(updateBgReactive);
 }
 
+// --- Keyboard ---
+
 on(document, 'keydown', e => {
-    if (e.key === 'i' && bgElement && !e.repeat) {
-        bgInvert = !bgInvert;
+    if (e.key === 'i' && sources.length > 0 && !e.repeat) {
+        sources.forEach(s => {
+            if (s.mode === 'fullscreen') s.invert = !s.invert;
+        });
+        saveSources();
+        refreshSourceCards();
     }
     if (e.key === 'Escape') {
-        closeYtModal();
-        reactivityPanel.classList.add('hidden');
+        mixerPanel.classList.add('hidden');
     }
 });
+
+// --- YouTube Library ---
+
+const YT_LIBRARY_KEY = 'ytLibrary';
 
 function getYouTubeId(url) {
     const m = url.match(/(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
     return m ? m[1] : null;
 }
-
-// --- YouTube Modal & Library ---
-
-const YT_LIBRARY_KEY = 'ytLibrary';
 
 function loadYtLibrary() {
     try { return JSON.parse(localStorage.getItem(YT_LIBRARY_KEY)) || []; }
@@ -632,6 +963,20 @@ function loadYtLibrary() {
 
 function saveYtLibrary(lib) {
     localStorage.setItem(YT_LIBRARY_KEY, JSON.stringify(lib));
+}
+
+function showYtPanel() {
+    const panel = document.getElementById('mixer-yt');
+    panel.classList.remove('hidden');
+    renderYtLibrary();
+    const input = document.getElementById('yt-url');
+    input.value = '';
+    input.focus();
+    document.getElementById('yt-error').classList.add('hidden');
+}
+
+function hideYtPanel() {
+    document.getElementById('mixer-yt').classList.add('hidden');
 }
 
 function renderYtLibrary() {
@@ -753,36 +1098,8 @@ function getSelectedYtIds() {
 function updateYtPlayBtn() {
     const btn = document.getElementById('yt-play');
     const count = getSelectedYtIds().length;
-    btn.textContent = count > 0 ? `PLAY ${count} VIDEO${count > 1 ? 'S' : ''}` : 'PLAY';
+    btn.textContent = count > 0 ? `ADD ${count} VIDEO${count > 1 ? 'S' : ''}` : 'ADD SOURCE';
     btn.classList.toggle('yt-btn-disabled', count === 0);
-}
-
-function playYouTubeVideos(ids) {
-    if (ids.length === 0) return;
-    clearBackground();
-    const iframe = document.createElement('iframe');
-    iframe.className = 'bg-youtube';
-    const first = ids[0];
-    iframe.src = `https://www.youtube-nocookie.com/embed/${first}?autoplay=1&loop=1&mute=1&controls=0&showinfo=0&rel=0&modestbranding=1&iv_load_policy=3&disablekb=1&playlist=${ids.join(',')}&playsinline=1`;
-    iframe.allow = 'autoplay; encrypted-media';
-    iframe.setAttribute('frameborder', '0');
-    iframe.style.display = 'block';
-    document.body.insertBefore(iframe, document.getElementById('display'));
-    bgElement = iframe;
-    activateBackground();
-}
-
-function openYtModal() {
-    renderYtLibrary();
-    show('#yt-modal');
-    const input = document.getElementById('yt-url');
-    input.value = '';
-    input.focus();
-    hide('#yt-error');
-}
-
-function closeYtModal() {
-    hide('#yt-modal');
 }
 
 function addYtVideo() {
@@ -792,11 +1109,11 @@ function addYtVideo() {
 
     const id = getYouTubeId(url);
     if (!id) {
-        show('#yt-error');
+        document.getElementById('yt-error').classList.remove('hidden');
         return;
     }
 
-    hide('#yt-error');
+    document.getElementById('yt-error').classList.add('hidden');
     const library = loadYtLibrary();
 
     if (library.some(v => v.id === id)) {
@@ -816,71 +1133,118 @@ function addYtVideo() {
     renderYtLibrary();
 }
 
-Settings.onChange('bgYoutube', openYtModal);
+// --- Mixer Source Cards ---
 
-on('#yt-close', 'click', closeYtModal);
-on('#yt-modal', 'click', e => { if (e.target.id === 'yt-modal') closeYtModal(); });
-on('#yt-add', 'click', addYtVideo);
-on('#yt-url', 'keydown', e => { if (e.key === 'Enter') addYtVideo(); });
-on('#yt-play', 'click', () => {
-    const ids = getSelectedYtIds();
-    if (ids.length > 0) {
-        playYouTubeVideos(ids);
-        closeYtModal();
+function refreshSourceCards() {
+    const container = document.getElementById('mixer-sources');
+    if (!container) return;
+    container.innerHTML = '';
+
+    if (sources.length === 0) {
+        const empty = document.createElement('div');
+        empty.className = 'mixer-empty';
+        empty.textContent = 'no sources';
+        container.append(empty);
+        return;
     }
-});
-on('#yt-clear', 'click', () => {
-    clearBackground();
-    closeYtModal();
-});
-on('#yt-toggle-all', 'click', () => {
-    const checks = document.querySelectorAll('#yt-library .yt-check');
-    const allChecked = [...checks].every(c => c.checked);
-    checks.forEach(c => { c.checked = !allChecked; });
-    updateYtPlayBtn();
-});
 
-Settings.onChange('bgVideoFile', () => {
-    ensureVideoInput().click();
-});
+    for (const source of sources) {
+        const card = document.createElement('div');
+        card.className = 'source-card';
+        card.dataset.sourceId = source.id;
 
-Settings.onChange('bgCamera', () => {
-    navigator.mediaDevices.getUserMedia({ video: true, audio: false })
-        .then(stream => {
-            clearBackground();
-            const v = ensureBgVideo();
-            v.srcObject = stream;
-            v.style.display = 'block';
-            v.play();
-            bgElement = v;
-            activateBackground();
-        })
-        .catch(err => {
-            console.error('Camera access denied:', err);
-            alert('Could not access camera');
+        const hdr = document.createElement('div');
+        hdr.className = 'source-card-header';
+
+        const badge = document.createElement('span');
+        badge.className = 'source-badge';
+        const badges = { youtube: 'YT', camera: 'CAM', screen: 'SCR', file: 'FILE' };
+        badge.textContent = badges[source.type] || '?';
+
+        const lbl = document.createElement('span');
+        lbl.className = 'source-label';
+        lbl.textContent = source.label;
+
+        const removeBtn = document.createElement('button');
+        removeBtn.className = 'source-remove';
+        removeBtn.textContent = '\u00d7';
+        on(removeBtn, 'click', () => removeSource(source.id));
+
+        hdr.append(badge, lbl, removeBtn);
+        card.append(hdr);
+
+        const body = document.createElement('div');
+        body.className = 'source-card-body';
+
+        // Mode toggle
+        const modeRow = document.createElement('div');
+        modeRow.className = 'source-row';
+        const modeLabel = document.createElement('span');
+        modeLabel.textContent = 'MODE';
+        const modeSelect = document.createElement('select');
+        modeSelect.className = 'source-mode';
+        for (const [val, txt] of [['fullscreen', 'FULL'], ['windowed', 'WINDOW']]) {
+            const opt = document.createElement('option');
+            opt.value = val;
+            opt.text = txt;
+            modeSelect.append(opt);
+        }
+        modeSelect.value = source.mode;
+        on(modeSelect, 'change', () => {
+            source.mode = modeSelect.value;
+            applySourceLayout(source);
+            saveSources();
+            refreshSourceCards();
         });
-});
+        modeRow.append(modeLabel, modeSelect);
+        body.append(modeRow);
 
-Settings.onChange('bgScreenShare', () => {
-    navigator.mediaDevices.getDisplayMedia({ video: true, audio: false })
-        .then(stream => {
-            clearBackground();
-            const v = ensureBgVideo();
-            v.srcObject = stream;
-            v.style.display = 'block';
-            v.play();
-            bgElement = v;
-            activateBackground();
-            stream.getVideoTracks()[0].addEventListener('ended', () => clearBackground());
-        })
-        .catch(err => {
-            console.error('Screen share denied:', err);
+        // Opacity slider
+        const opRow = document.createElement('div');
+        opRow.className = 'source-row';
+        const opLabel = document.createElement('span');
+        opLabel.textContent = 'OPACITY';
+        const opSlider = document.createElement('input');
+        opSlider.type = 'range';
+        opSlider.min = '0';
+        opSlider.max = '100';
+        opSlider.value = source.opacity;
+        const opVal = document.createElement('span');
+        opVal.className = 'source-val';
+        opVal.textContent = source.opacity;
+        on(opSlider, 'input', () => {
+            source.opacity = parseInt(opSlider.value);
+            opVal.textContent = source.opacity;
+            if (source.wrapper) source.wrapper.style.opacity = source.opacity / 100;
+            saveSources();
         });
-});
+        opRow.append(opLabel, opSlider, opVal);
+        body.append(opRow);
 
-Settings.onChange('bgRemove', () => {
-    clearBackground();
-});
+        // Invert toggle (fullscreen only)
+        if (source.mode === 'fullscreen') {
+            const invRow = document.createElement('div');
+            invRow.className = 'source-row';
+            const invLabel = document.createElement('span');
+            invLabel.textContent = 'INVERT';
+            const invCheck = document.createElement('input');
+            invCheck.type = 'checkbox';
+            invCheck.checked = source.invert;
+            invCheck.className = 'source-check';
+            on(invCheck, 'change', () => {
+                source.invert = invCheck.checked;
+                saveSources();
+            });
+            invRow.append(invLabel, invCheck);
+            body.append(invRow);
+        }
+
+        card.append(body);
+        container.append(card);
+    }
+}
+
+refreshSourceCards();
 
 // --- Audio Device Selection ---
 

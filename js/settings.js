@@ -38,12 +38,7 @@ setupSection('AUDIO');
 setupToggle('enableAudio', 'Enable Audio', true);
 
 setupSection('BACKGROUND');
-setupButton('bgYoutube', 'YouTube');
-setupButton('bgVideoFile', 'Video File');
-setupButton('bgCamera', 'Camera');
-setupButton('bgScreenShare', 'Screen Share');
-setupButton('bgRemove', 'Remove');
-setupButton('reactivity', 'Reactivity');
+setupButton('mixer', 'Mixer');
 
 setupSection('SYSTEM');
 setupToggle('preventSleep', 'Prevent Sleep', false);
