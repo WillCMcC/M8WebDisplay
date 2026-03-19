@@ -104,14 +104,16 @@ on('#display', 'dblclick', toggleFullscreen);
 
 
 function connectionChanged(isConnected) {
+    const menuBtn = document.getElementById('menu-button');
     if (isConnected) {
         hide('#buttons, .error, #info');
         Audio.start(10);
-
+        menuBtn.classList.add('auto-hide');
     } else {
         renderer.clear();
         show('#buttons');
         Audio.stop();
+        menuBtn.classList.remove('auto-hide');
     }
 
     Wake.connectionChanged(isConnected);
