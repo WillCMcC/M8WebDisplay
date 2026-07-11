@@ -9,11 +9,14 @@
     bottom: 0;
     left: 0;
     right: 0;
-    padding: 100px;
-    background-color: rgba(0, 0, 0, 0.75);
+    padding: clamp(28px, 8vw, 100px);
+    box-sizing: border-box;
+    background: rgba(4, 8, 8, .94);
+    backdrop-filter: blur(18px);
     text-align: center;
     font-family: $m8-font;
     line-height: 1.5;
+    z-index: 1300;
 
     &.hidden {
         display: none;
@@ -39,7 +42,7 @@
     p.file-error-msg,
     p.device-error-msg,
     p.flash-error-msg {
-        color: #e22;
+        color: $danger;
     }
 
     &.file-select {
@@ -117,7 +120,7 @@
     button.close {
         display: block;
         position: absolute;
-        right: 100px;
-        bottom: 100px;
+        right: clamp(28px, 8vw, 100px);
+        bottom: clamp(28px, 8vw, 100px);
     }
 }

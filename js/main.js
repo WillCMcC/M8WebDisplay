@@ -224,6 +224,7 @@ function buildMixerPanel() {
     const headerClose = document.createElement('button');
     headerClose.className = 'mixer-close';
     headerClose.innerHTML = '&times;';
+    headerClose.setAttribute('aria-label', 'Close mixer');
     on(headerClose, 'click', () => panel.classList.add('hidden'));
     header.append(headerText, headerClose);
     content.append(header);
@@ -247,6 +248,7 @@ function buildMixerPanel() {
     for (const [label, action] of [['+ YT', 'youtube'], ['+ CAM', 'camera'], ['+ SCREEN', 'screen'], ['+ FILE', 'file']]) {
         const b = document.createElement('button');
         b.textContent = label;
+        b.setAttribute('aria-label', `Add ${action === 'youtube' ? 'YouTube' : action} source`);
         on(b, 'click', () => addSource(action));
         addRow.append(b);
     }
@@ -335,6 +337,7 @@ function buildMixerPanel() {
         input.min = '0';
         input.max = '100';
         input.value = fx[s.key];
+        input.setAttribute('aria-label', `${s.label} intensity`);
 
         const val = document.createElement('span');
         val.className = 'mixer-fx-val';
@@ -697,8 +700,13 @@ function activateBackground() {
 }
 
 function addYouTubeSource(ids) {
+    const lib = loadYtLibrary();
+    const titles = ids.map(id => {
+        const entry = lib.find(v => v.id === id);
+        return entry && entry.title ? entry.title : id;
+    });
     const source = createSource('youtube', {
-        label: ids.length === 1 ? ids[0] : `${ids.length} videos`,
+        label: ids.length === 1 ? titles[0] : `${ids.length} videos`,
         ytIds: ids,
     });
     sources.push(source);
@@ -956,6 +964,13 @@ function getYouTubeId(url) {
     return m ? m[1] : null;
 }
 
+function fetchYouTubeTitle(id) {
+    return fetch(`https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${id}&format=json`)
+        .then(r => r.ok ? r.json() : null)
+        .then(data => data ? data.title : null)
+        .catch(() => null);
+}
+
 function loadYtLibrary() {
     try { return JSON.parse(localStorage.getItem(YT_LIBRARY_KEY)) || []; }
     catch { return []; }
@@ -973,6 +988,18 @@ function showYtPanel() {
     input.value = '';
     input.focus();
     document.getElementById('yt-error').classList.add('hidden');
+
+    // Backfill missing titles
+    const lib = loadYtLibrary();
+    const missing = lib.filter(v => !v.title);
+    if (missing.length > 0) {
+        Promise.all(missing.map(v =>
+            fetchYouTubeTitle(v.id).then(title => { if (title) v.title = title; })
+        )).then(() => {
+            saveYtLibrary(lib);
+            renderYtLibrary();
+        });
+    }
 }
 
 function hideYtPanel() {
@@ -1018,7 +1045,7 @@ function renderYtLibrary() {
 
         const label = document.createElement('span');
         label.className = 'yt-id';
-        label.textContent = video.id;
+        label.textContent = video.title || video.id;
 
         const del = document.createElement('button');
         del.className = 'yt-del';
@@ -1131,9 +1158,26 @@ function addYtVideo() {
     saveYtLibrary(library);
     input.value = '';
     renderYtLibrary();
+
+    fetchYouTubeTitle(id).then(title => {
+        if (!title) return;
+        const lib = loadYtLibrary();
+        const entry = lib.find(v => v.id === id);
+        if (entry) {
+            entry.title = title;
+            saveYtLibrary(lib);
+            renderYtLibrary();
+        }
+    });
 }
 
 // --- Mixer Source Cards ---
+
+function syncSourceDomOrder() {
+    for (const source of sources) {
+        if (source.wrapper) bgContainer.append(source.wrapper);
+    }
+}
 
 function refreshSourceCards() {
     const container = document.getElementById('mixer-sources');
@@ -1151,10 +1195,15 @@ function refreshSourceCards() {
     for (const source of sources) {
         const card = document.createElement('div');
         card.className = 'source-card';
-        card.dataset.sourceId = source.id;
+        card.dataset.sourceId = String(source.id);
+        card.draggable = true;
 
         const hdr = document.createElement('div');
         hdr.className = 'source-card-header';
+
+        const grip = document.createElement('span');
+        grip.className = 'source-grip';
+        grip.textContent = '\u2261';
 
         const badge = document.createElement('span');
         badge.className = 'source-badge';
@@ -1168,10 +1217,53 @@ function refreshSourceCards() {
         const removeBtn = document.createElement('button');
         removeBtn.className = 'source-remove';
         removeBtn.textContent = '\u00d7';
+        removeBtn.setAttribute('aria-label', `Remove ${source.label}`);
         on(removeBtn, 'click', () => removeSource(source.id));
 
-        hdr.append(badge, lbl, removeBtn);
+        hdr.append(grip, badge, lbl, removeBtn);
         card.append(hdr);
+
+        // Drag-to-reorder
+        on(card, 'dragstart', e => {
+            card.classList.add('source-dragging');
+            e.dataTransfer.effectAllowed = 'move';
+            e.dataTransfer.setData('text/plain', String(source.id));
+        });
+
+        on(card, 'dragend', () => {
+            card.classList.remove('source-dragging');
+            container.querySelectorAll('.source-drag-over').forEach(el => el.classList.remove('source-drag-over'));
+        });
+
+        on(card, 'dragover', e => {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+            const dragging = container.querySelector('.source-dragging');
+            if (dragging && dragging !== card) {
+                card.classList.add('source-drag-over');
+            }
+        });
+
+        on(card, 'dragleave', () => {
+            card.classList.remove('source-drag-over');
+        });
+
+        on(card, 'drop', e => {
+            e.preventDefault();
+            card.classList.remove('source-drag-over');
+            const draggedId = parseInt(e.dataTransfer.getData('text/plain'));
+            if (draggedId && draggedId !== source.id) {
+                const fromIdx = sources.findIndex(s => s.id === draggedId);
+                const toIdx = sources.findIndex(s => s.id === source.id);
+                if (fromIdx !== -1 && toIdx !== -1) {
+                    const [moved] = sources.splice(fromIdx, 1);
+                    sources.splice(toIdx, 0, moved);
+                    syncSourceDomOrder();
+                    saveSources();
+                    refreshSourceCards();
+                }
+            }
+        });
 
         const body = document.createElement('div');
         body.className = 'source-card-body';
@@ -1183,6 +1275,7 @@ function refreshSourceCards() {
         modeLabel.textContent = 'MODE';
         const modeSelect = document.createElement('select');
         modeSelect.className = 'source-mode';
+        modeSelect.setAttribute('aria-label', `${source.label} layout mode`);
         for (const [val, txt] of [['fullscreen', 'FULL'], ['windowed', 'WINDOW']]) {
             const opt = document.createElement('option');
             opt.value = val;
@@ -1209,6 +1302,7 @@ function refreshSourceCards() {
         opSlider.min = '0';
         opSlider.max = '100';
         opSlider.value = source.opacity;
+        opSlider.setAttribute('aria-label', `${source.label} opacity`);
         const opVal = document.createElement('span');
         opVal.className = 'source-val';
         opVal.textContent = source.opacity;

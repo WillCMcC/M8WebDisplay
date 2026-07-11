@@ -6,3 +6,13 @@ $m8-font: 'm8stealth57';
 $m8-font-big: 'm8stealth89';
 $shield-z: 1000;
 
+// Shared studio UI palette. The display itself keeps the M8's colours; these
+// tokens are for the surrounding controls and overlays.
+$ink: #060909;
+$panel: #0d1212;
+$panel-raised: #131919;
+$line: rgba(220, 255, 251, 0.12);
+$muted: #82908e;
+$text: #e7efed;
+$signal: #b9ff39;
+$danger: #ff6b62;

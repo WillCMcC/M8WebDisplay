@@ -113,6 +113,7 @@ build/index.html: index.html build/index.css build/main.js favicon.png $(NPM)
 	@npx juice \
 	  --apply-style-tags false \
 	  --remove-style-tags false \
+	  --web-resources-scripts false \
 	  $@.tmp $@
 	@rm $@.tmp
 

@@ -7,11 +7,12 @@
 <head>
     <title>M8 Display</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="theme-color" content="#000" />
+    <meta name="theme-color" content="#060909" />
     <link rel="shortcut icon" type="image/png" href="favicon.png">
     <link rel="apple-touch-icon" href="icon.png">
     <link rel="manifest" href="app.webmanifest">
     <link rel="stylesheet" href="build/index.css">
+    <script defer src="https://analytics.3218i.com/script.js" data-website-id="d0b1c0a0-5884-4104-a7c1-77ba8f655800"></script>
 </head>
 <body>
     <div id="bg-sources"></div>
@@ -19,7 +20,7 @@
         <canvas id="canvas" width="320" height="240"></canvas>
 
         <div id="buttons" class="hidden">
-            <button id="connect">Connect</button>
+            <button id="connect"><span>Connect M8</span><small>USB / Serial</small></button>
         </div>
 
         <div id="mapping-buttons"></div>
@@ -60,21 +61,29 @@
         These are only currently supported in Chrome and some Chrome-derived browsers.</p>
     </div>
 
-    <div id="info">
-        <h1>M8 Display</h1>
-        <p>A light fork of <a href="https://github.com/derkyjadex/M8WebDisplay" target="_blank" rel="noopener">derkyjadex's M8WebDisplay</a> with support for YouTube, video file, and camera backgrounds with audio-reactive effects.</p>
-        <p>Use the menu to load a background, then open <strong>Reactivity</strong> to dial in shake, skew, hue shift, blur, and more driven by your M8's audio output. Press <kbd>I</kbd> to invert the background on the fly.</p>
-        <p>All settings and your video library are stored locally by your browser.</p>
-        <button>OK</button>
-        <p class="build">Build BUILDNUM</p>
+    <div id="info" role="dialog" aria-labelledby="welcome-title">
+        <div class="info-kicker"><span></span> M8 visual console</div>
+        <h1 id="welcome-title">Your tracker,<br><em>on stage.</em></h1>
+        <p class="info-lead">A performance display for Dirtywave M8 with layered video sources and audio-reactive motion.</p>
+        <div class="info-features">
+            <div><strong>01</strong><span>Connect your M8 over USB</span></div>
+            <div><strong>02</strong><span>Open Mixer to add visuals</span></div>
+            <div><strong>03</strong><span>Shape movement with Reactivity</span></div>
+        </div>
+        <div class="info-note">Everything stays in this browser. Press <kbd>I</kbd> to invert the background.</div>
+        <div class="info-footer">
+            <a href="https://github.com/derkyjadex/M8WebDisplay" target="_blank" rel="noopener">Based on M8WebDisplay ↗</a>
+            <button>Enter console</button>
+        </div>
+        <p class="build">BUILDNUM</p>
     </div>
 
-    <button id="menu-button">Menu</button>
+    <button id="menu-button" aria-label="Open controls" title="Open controls"><span>Controls</span></button>
     <div id="settings" class="hidden">
         <div class="settings-content">
             <div class="settings-header">
-                <span>SETTINGS</span>
-                <button id="settings-close">&times;</button>
+                <div><span>CONTROL ROOM</span><small>Display, input &amp; system</small></div>
+                <button id="settings-close" aria-label="Close controls">&times;</button>
             </div>
             <div id="settings-body"></div>
         </div>
