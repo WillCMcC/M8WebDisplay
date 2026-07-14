@@ -5,11 +5,13 @@ DEPLOY = \
 	build/index.html \
 	build/worker.js \
 	app.webmanifest \
-	build/icon.png
+	build/icon.png \
+	build/icon-512.png
 
 CACHE_FILES = \
 	build/index.html \
 	build/icon.png \
+	build/icon-512.png \
 	app.webmanifest
 
 DEPLOY_DIR = deploy/
@@ -118,6 +120,10 @@ build/index.html: index.html build/index.css build/main.js favicon.png $(NPM)
 	@rm $@.tmp
 
 build/icon.png: icon.png
+	@echo Building $@
+	@cp $< $@
+
+build/icon-512.png: icon-512.png
 	@echo Building $@
 	@cp $< $@
 
