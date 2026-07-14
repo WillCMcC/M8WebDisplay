@@ -10,4 +10,5 @@ RUN make all
 FROM nginx:alpine
 COPY --from=builder /app/build/ /usr/share/nginx/html/
 COPY --from=builder /app/app.webmanifest /usr/share/nginx/html/
+RUN chmod -R a+rX /usr/share/nginx/html
 EXPOSE 80
