@@ -149,7 +149,26 @@ function setupConnection(connection, errorMessage) {
     connection.connect(true).catch(() => {});
 }
 
-on('#info button', 'click', () => hide('#info'));
+function leaveWelcome() {
+    document.body.classList.remove('welcome-open');
+    hide('#info, .error');
+}
+
+on('#welcome-connect', 'click', () => {
+    leaveWelcome();
+
+    if (navigator.serial || navigator.usb) {
+        document.getElementById('connect').click();
+    }
+});
+
+on('#welcome-explore', 'click', leaveWelcome);
+
+if (!(navigator.serial || navigator.usb)) {
+    const welcomeConnect = document.getElementById('welcome-connect');
+    welcomeConnect.querySelector('span').textContent = 'Open console';
+    welcomeConnect.querySelector('small').textContent = 'Connect later in Chrome or Edge';
+}
 
 // --- Background Sources ---
 

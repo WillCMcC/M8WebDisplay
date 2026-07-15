@@ -61,6 +61,10 @@
         body.mapping & {
             display: none;
         }
+
+        body.welcome-open & {
+            display: none;
+        }
     }
 
     #mapping-buttons {

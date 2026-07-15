@@ -14,7 +14,7 @@
     <link rel="stylesheet" href="build/index.css">
     <script defer src="https://analytics.3218i.com/script.js" data-website-id="d0b1c0a0-5884-4104-a7c1-77ba8f655800"></script>
 </head>
-<body>
+<body class="welcome-open">
     <div id="bg-sources"></div>
     <div id="display">
         <canvas id="canvas" width="320" height="240"></canvas>
@@ -70,10 +70,13 @@
             <div><strong>02</strong><span>Open Mixer to add visuals</span></div>
             <div><strong>03</strong><span>Shape movement with Reactivity</span></div>
         </div>
-        <div class="info-note">Everything stays in this browser. Press <kbd>I</kbd> to invert the background.</div>
+        <div class="info-note"><span class="privacy-pulse"></span>Everything stays in this browser <span aria-hidden="true">·</span> Chrome or Edge recommended</div>
         <div class="info-footer">
+            <div class="info-actions">
+                <button id="welcome-connect"><span>Connect M8</span><small>Choose USB / Serial device</small></button>
+                <button id="welcome-explore" class="button-quiet">Explore without hardware</button>
+            </div>
             <a href="https://github.com/derkyjadex/M8WebDisplay" target="_blank" rel="noopener">Based on M8WebDisplay ↗</a>
-            <button>Enter console</button>
         </div>
         <p class="build">BUILDNUM</p>
     </div>
