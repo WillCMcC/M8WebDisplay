@@ -1,0 +1,17 @@
+preMergeGate: npm ci && make all
+deployments:
+  - id: web
+    label: m8.boy.dev
+    cwd: .
+    command:
+      - ~/brain/bin/caprover-tar-deploy.sh
+      - m8
+    app: m8
+    checks:
+      - url: https://m8.boy.dev/
+        contains: M8 performance
+      - url: https://m8.3218i.com/
+        contains: M8 performance
+    purgeDomains:
+      - m8.boy.dev
+      - m8.3218i.com
